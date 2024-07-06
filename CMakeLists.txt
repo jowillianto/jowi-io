@@ -4,7 +4,7 @@ set (CMAKE_CXX_STANDARD 23)
 set (CMAKE_CXX_STANDARD_REQUIRED true)
 set (CMAKE_CXX_SCAN_FOR_MODULES true)
 
-if (NOT ${PROJECT_NAME})
+if (NOT TARGET ${PROJECT_NAME})
   file(GLOB ${PROJECT_NAME}_src ${CMAKE_CURRENT_LIST_DIR}/src/*.ccm)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/variant_error)
   add_library(${PROJECT_NAME})
