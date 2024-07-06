@@ -4,18 +4,16 @@ set (CMAKE_CXX_STANDARD 23)
 set (CMAKE_CXX_STANDARD_REQUIRED true)
 set (CMAKE_CXX_SCAN_FOR_MODULES true)
 
-
-if (NOT moderna_variant_error)
+if (NOT ${PROJECT_NAME})
+  file(GLOB ${PROJECT_NAME}_src ${CMAKE_CURRENT_LIST_DIR}/src/*.ccm)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/variant_error)
+  add_library(${PROJECT_NAME})
+  target_sources(${PROJECT_NAME}
+    PUBLIC
+      FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src}
+  )
+  target_link_libraries(${PROJECT_NAME} PUBLIC moderna_variant_error)
 endif()
-
-file(GLOB ${PROJECT_NAME}_src ${CMAKE_CURRENT_LIST_DIR}/src/*.ccm)
-add_library(${PROJECT_NAME})
-target_sources(${PROJECT_NAME}
-  PUBLIC
-    FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src}
-)
-target_link_libraries(${PROJECT_NAME} PUBLIC moderna_variant_error)
 
 if (
   EXISTS ${CMAKE_CURRENT_LIST_DIR}/../test-lib
@@ -23,12 +21,8 @@ if (
   AND PROJECT_IS_TOP_LEVEL
 )
   include(CTest)
-  if (NOT moderna_test_lib)
-    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../test-lib test-lib)
-  endif()
-  if (NOT moderna_file_lock)
-    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../file-lock file-lock)
-  endif()
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../test-lib test-lib)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../file-lock file-lock)
   moderna_add_test(
     ${PROJECT_NAME}_tests
     ${CMAKE_CURRENT_LIST_DIR}/tests/tests.cpp
