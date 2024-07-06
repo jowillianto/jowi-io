@@ -188,7 +188,7 @@ namespace moderna::io {
       return newline_split;
     }
     /*
-      Read one line into memory.
+      Read one line into memory
     */
     template <size_t buffer_size = 4096> system_error_expected<std::string> readline() {
       std::array<char, buffer_size> buf;
@@ -206,6 +206,12 @@ namespace moderna::io {
       }
       return str_buf;
     }
+    template <size_t buffer_size = 4096>
+    system_error_expected<std::vector<std::string>> read_n_lines(size_t number_of_lines) {
+      std::vector<std::string> container;
+      container.reserve(number_of_lines);
+      return read_n_lines<buffer_size>(number_of_lines, container);
+    }
 
     static system_error_expected<readable_file> open(std::string_view file_path) noexcept {
       return open_to_ptr(file_path, "r").transform([](auto file_ptr) {
@@ -221,6 +227,20 @@ namespace moderna::io {
   protected:
     readable_file(unique_file_ptr file) noexcept : file_ptr_owner(std::move(file)) {}
     readable_file() noexcept : file_ptr_owner(nullptr) {}
+
+  private:
+    template <size_t buffer_size = 4096>
+    system_error_expected<std::vector<std::string>> read_n_lines(
+      size_t number_of_lines, std::vector<std::string> &container
+    ) {
+      return readline().and_then([&](auto &&line) {
+        if (number_of_lines != 0) {
+          container.emplace_back(std::move(line));
+          return read_n_lines<buffer_size>(number_of_lines - 1, container);
+        } else
+          return system_error_expected<std::vector<std::string>>{container};
+      });
+    }
   };
   /*
     A simple structure representing a writable file.

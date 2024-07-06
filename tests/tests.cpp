@@ -27,6 +27,13 @@ auto reader_test =
     .add_test("simple_read_line", []() {
       auto file_reader = moderna::io::readable_file::open(READ_FILE).value();
       moderna::test_lib::assert_equal(file_reader.readline().value(), "HELLO WORLD 0\n");
+    })
+    .add_test("read_n_lines", [](){
+      auto file_reader = moderna::io::readable_file::open(READ_FILE).value();
+      auto lines = file_reader.read_n_lines(2).value();
+      moderna::test_lib::assert_equal(lines.size(), 2);
+      moderna::test_lib::assert_equal(lines[0], "HELLO WORLD 0\n");
+      moderna::test_lib::assert_equal(lines[1], "HELLO WORLD 1\n");
     });
 auto writer_test = moderna::test_lib::make_tester("writer_tests")
                      .add_test(
