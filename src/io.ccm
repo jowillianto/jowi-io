@@ -8,6 +8,7 @@ module;
 #include <cstdio>
 #include <expected>
 #include <fcntl.h>
+#include <functional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -33,17 +34,24 @@ namespace moderna::io {
   /*
     Readable File Interface
   */
-  template <typename file_t>
+  export template <typename file_t>
   concept readable_file_t = requires(file_t file) {
     { file.read() } -> std::same_as<system_error_expected<std::string>>;
     { file.readline() } -> std::same_as<system_error_expected<std::string>>;
     { file.readlines() } -> std::same_as<system_error_expected<std::vector<std::string>>>;
+    {
+      file.read_n_lines(std::declval<size_t>())
+    } -> std::same_as<system_error_expected<std::vector<std::string>>>;
+    { file.read_n(std::declval<size_t>()) } -> std::same_as<system_error_expected<std::string>>;
+    {
+      file.read_line_until(std::declval<std::function<bool(std::string_view)>>())
+    } -> std::same_as<system_error_expected<std::vector<std::string>>>;
     { file.is_eof() } -> std::same_as<bool>;
   };
   /*
     Writable file interface.
   */
-  template <typename file_t>
+  export template <typename file_t>
   concept writable_file_t = requires(file_t file) {
     { file.write(std::declval<std::string_view>()) };
     { file.writeline(std::declval<std::string_view>()) };
@@ -206,11 +214,28 @@ namespace moderna::io {
       }
       return str_buf;
     }
+    /*
+      Read N Lines into memory
+    */
     template <size_t buffer_size = 4096>
     system_error_expected<std::vector<std::string>> read_n_lines(size_t number_of_lines) {
       std::vector<std::string> container;
       container.reserve(number_of_lines);
       return read_n_lines<buffer_size>(number_of_lines, container);
+    }
+
+    /*
+      Keep reading lines until a specific condition is triggered.
+    */
+    template <std::invocable<std::string_view> F, size_t buffer_size = 4096>
+      requires(std::same_as<std::invoke_result_t<F, std::string_view>, bool>)
+    system_error_expected<std::vector<std::string>> read_line_until(F &&condition) {
+      std::vector<std::string> container;
+      return read_line_until<F, buffer_size>(std::forward<F>(condition), container);
+    }
+
+    bool is_eof() {
+      return feof(__file.get());
     }
 
     static system_error_expected<readable_file> open(std::string_view file_path) noexcept {
@@ -239,6 +264,18 @@ namespace moderna::io {
           return read_n_lines<buffer_size>(number_of_lines - 1, container);
         } else
           return system_error_expected<std::vector<std::string>>{container};
+      });
+    }
+    template <std::invocable<std::string_view> F, size_t buffer_size = 4096>
+    system_error_expected<std::vector<std::string>> read_line_until(
+      F &&condition, std::vector<std::string> &container
+    ) {
+      return readline().and_then([&](auto &&line) {
+        auto &ref = container.emplace_back(line);
+        if (std::invoke(std::forward<F>(condition), std::string_view{ref}))
+          return system_error_expected<std::vector<std::string>>(container);
+        else
+          return read_line_until(std::forward<F>(condition), container);
       });
     }
   };
@@ -413,7 +450,6 @@ namespace moderna::io {
         return std::unexpected{std::system_error{errno, std::generic_category()}};
       return socket_file::from_fd(unique_fd{accept_fd}, address);
     }
-
   private:
     unique_fd __file;
     struct sockaddr_in __address;

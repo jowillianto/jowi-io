@@ -24,11 +24,14 @@ auto reader_test =
         moderna::test_lib::assert_equal(read_content[2], "HELLO WORLD 2\n");
       }
     )
-    .add_test("simple_read_line", []() {
-      auto file_reader = moderna::io::readable_file::open(READ_FILE).value();
-      moderna::test_lib::assert_equal(file_reader.readline().value(), "HELLO WORLD 0\n");
-    })
-    .add_test("read_n_lines", [](){
+    .add_test(
+      "simple_read_line",
+      []() {
+        auto file_reader = moderna::io::readable_file::open(READ_FILE).value();
+        moderna::test_lib::assert_equal(file_reader.readline().value(), "HELLO WORLD 0\n");
+      }
+    )
+    .add_test("read_n_lines", []() {
       auto file_reader = moderna::io::readable_file::open(READ_FILE).value();
       auto lines = file_reader.read_n_lines(2).value();
       moderna::test_lib::assert_equal(lines.size(), 2);
@@ -42,7 +45,7 @@ auto writer_test = moderna::test_lib::make_tester("writer_tests")
                          auto mutex = moderna::file_lock::FileMutex(WRITE_FILE);
                          std::unique_lock l{mutex};
                          auto writer = moderna::io::writable_file::open(WRITE_FILE).value();
-                         writer.write("HELLO WORLD");
+                         writer.write("HELLO WORLD").value();
                          writer.close();
                          auto reader = moderna::io::readable_file::open(WRITE_FILE).value();
                          moderna::test_lib::assert_equal(reader.read().value(), "HELLO WORLD");
@@ -52,7 +55,7 @@ auto writer_test = moderna::test_lib::make_tester("writer_tests")
                        auto mutex = moderna::file_lock::FileMutex(WRITE_FILE);
                        std::unique_lock l{mutex};
                        auto writer = moderna::io::writable_file::open(WRITE_FILE).value();
-                       writer.writeline("HELLO WORLD");
+                       writer.writeline("HELLO WORLD").value();
                        writer.close();
                        auto reader = moderna::io::readable_file::open(WRITE_FILE).value();
                        moderna::test_lib::assert_equal(reader.read().value(), "HELLO WORLD\n");
