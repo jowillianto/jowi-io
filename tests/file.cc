@@ -5,11 +5,10 @@ namespace test_lib = moderna::test_lib;
 namespace io = moderna::io;
 
 #include <moderna/test_lib.hpp>
-#include <filesystem>
 #include <utility>
 
 MODERNA_SETUP(argc, argv) {
-  test_lib::set_thread_count(1);
+  test_lib::get_test_context().thread_count = 1;
 }
 
 MODERNA_ADD_TEST(read_test) {
@@ -82,8 +81,7 @@ MODERNA_ADD_TEST(open_file_fail) {
 }
 
 MODERNA_ADD_TEST(open_file_write_delete_file) {
-  auto path = std::filesystem::path{"/tmp"} / "lol";
-  auto opener = io::file_opener<io::open_mode::write_truncate>{path};
+  auto opener = io::file_opener<io::open_mode::write_truncate>{"/tmp/lol"};
   auto res_file = opener.open();
   test_lib::assert_expected(res_file);
 }

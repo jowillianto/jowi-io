@@ -7,7 +7,11 @@ set (CMAKE_CXX_SCAN_FOR_MODULES true)
 option (MODERNA_IO_BUILD_TESTS "Build tests" OFF)
 
 if (NOT TARGET ${PROJECT_NAME})
-  file(GLOB ${PROJECT_NAME}_src ${CMAKE_CURRENT_LIST_DIR}/src/*.cc)
+  file(
+    GLOB ${PROJECT_NAME}_src 
+      ${CMAKE_CURRENT_LIST_DIR}/src/*.cc
+      ${CMAKE_CURRENT_LIST_DIR}/src/file_descriptor/*.cc
+    )
   if (WIN32)
     file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/win32/*.cc)
   elseif(UNIX)

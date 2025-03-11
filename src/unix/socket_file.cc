@@ -10,27 +10,29 @@ module;
 #include <utility>
 export module moderna.io:socket_file;
 import :file;
-import :local_file;
+import :file_opener;
 import :error;
-import :file_descriptor;
+import :is_file_descriptor;
+import :file_reader;
+import :file_writer;
 
 namespace moderna::io {
   /*
     tcp_connection
-    this represents a tcp connection between the client and the server. 
+    this represents a tcp connection between the client and the server.
   */
-  export template <is_file_descriptor desc_t> struct tcp_connection {
-    tcp_connection(desc_t fd, struct sockaddr_in addr) noexcept :
+  export template <is_file_descriptor fd_t> struct tcp_connection {
+    tcp_connection(fd_t fd, struct sockaddr_in addr) noexcept :
       __fd{std::move(fd)}, __addr{std::move(addr)} {}
     tcp_connection(tcp_connection &&) noexcept = default;
     tcp_connection(const tcp_connection &) = default;
     tcp_connection &operator=(tcp_connection &&) noexcept = default;
     tcp_connection &operator=(const tcp_connection &) = default;
 
-    is_readable<std::string> auto get_reader() const noexcept {
+    auto get_reader() const noexcept {
       return file_reader{__fd.borrow()};
     }
-    is_writable<std::string_view> auto get_writer() const noexcept {
+    auto get_writer() const noexcept {
       return file_writer{__fd.borrow()};
     }
 
@@ -49,7 +51,7 @@ namespace moderna::io {
     }
 
     static std::expected<tcp_connection, fs_error> create(
-      desc_t fd, struct sockaddr_in addr, bool non_blocking
+      fd_t fd, struct sockaddr_in addr, bool non_blocking
     ) {
       if (non_blocking) {
         int flags = fcntl(fd.fd(), F_GETFL);
@@ -67,13 +69,13 @@ namespace moderna::io {
     }
 
   private:
-    desc_t __fd;
+    fd_t __fd;
     struct sockaddr_in __addr;
   };
   /*
     tcp_listener
-    This represents a tcp listener that listens for incoming connections. This struct 
-    satisfies the file_opener concept since it opens a connection. 
+    This represents a tcp listener that listens for incoming connections. This struct
+    satisfies the file_opener concept since it opens a connection.
   */
   export template <is_file_descriptor desc_t> struct tcp_listener {
     tcp_listener(desc_t fd, struct sockaddr_in addr, bool non_blocking) noexcept :
@@ -175,7 +177,7 @@ namespace moderna::io {
 
   /*
     tcp_connector
-    creates a tcp_connection. I.e. connects to a tcp_server. 
+    creates a tcp_connection. I.e. connects to a tcp_server.
   */
   export struct tcp_connector {
     tcp_connector(std::string ip, int port, bool non_blocking = false) :

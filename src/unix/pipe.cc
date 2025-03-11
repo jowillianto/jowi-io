@@ -9,7 +9,10 @@ export module moderna.io:pipe;
 import :file;
 import :file_descriptor;
 import :error;
-import :local_file;
+import :file_reader;
+import :file_writer;
+import :is_file_descriptor;
+import :file_opener;
 
 namespace moderna::io {
   /*
@@ -19,17 +22,6 @@ namespace moderna::io {
   export template <is_file_descriptor write_desc_t, is_file_descriptor read_desc_t> struct pipe {
     file_reader<read_desc_t> reader;
     file_writer<write_desc_t> writer;
-
-    void close_reader() {
-      reader.close();
-    }
-    void close_writer() {
-      writer.close();
-    }
-    void close() {
-      close_reader();
-      close_writer();
-    }
   };
   export struct pipe_creator {
     pipe_creator(bool non_blocking = false) : __non_blocking{non_blocking} {}

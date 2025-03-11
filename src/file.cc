@@ -6,7 +6,11 @@ module;
 export module moderna.io:file;
 import :error;
 import :seek_mode;
-
+import :borrowed_file_descriptor;
+import :is_file_descriptor;
+/*
+  This file describes the relationship between different file objects.
+*/
 namespace moderna::io {
   export template <class file_t, class write_t>
   concept is_writable = requires(file_t f) {
@@ -35,8 +39,22 @@ namespace moderna::io {
   concept is_exception = requires(exception_t e) {
     { e.what() } -> std::convertible_to<std::string_view>;
   };
+
+  export template <class file_t>
+  concept is_file = requires(const file_t file) {
+    { file.fd() } -> is_file_descriptor;
+  };
+  export template <class file_t>
+  concept is_borroweable_file = requires(const file_t file) {
+    is_file<file_t>;
+    { file.borrow() } -> is_file;
+  };
+
+  /*
+    Factory function for files.
+  */
   export template <class opener_t>
   concept is_file_opener = requires(const opener_t opener) {
-    { opener.open() };
+    { opener.open() } -> is_file;
   };
 }

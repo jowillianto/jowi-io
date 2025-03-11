@@ -1,16 +1,13 @@
+#include <moderna/test_lib.hpp>
+#include <future>
 import moderna.test_lib;
 import moderna.io;
 
 namespace test_lib = moderna::test_lib;
 namespace io = moderna::io;
 
-#include <moderna/test_lib.hpp>
-#include <future>
-#include <iostream>
-#include <utility>
-
 MODERNA_SETUP(argc, argv) {
-  test_lib::set_thread_count(1);
+  test_lib::get_test_context().thread_count = 1;
 }
 MODERNA_ADD_TEST(create_listener) {
   int port = test_lib::random_integer(40000, 60000);
