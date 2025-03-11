@@ -6,6 +6,7 @@ import :is_file_descriptor;
 namespace moderna::io {
   export template <class fd_t> struct borrowed_file_descriptor {
     using native_handle_t = fd_t;
+    borrowed_file_descriptor(fd_t fd) noexcept : __fd{fd} {}
     borrowed_file_descriptor(const is_file_descriptor auto &fd) noexcept : __fd{fd.fd()} {}
     borrowed_file_descriptor(const borrowed_file_descriptor &) noexcept = default;
     borrowed_file_descriptor(borrowed_file_descriptor &&) noexcept = default;
@@ -24,7 +25,5 @@ namespace moderna::io {
 
   private:
     fd_t __fd;
-
-    borrowed_file_descriptor(fd_t fd) noexcept : __fd{fd} {}
   };
 }
