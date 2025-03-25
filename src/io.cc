@@ -4,6 +4,8 @@ export import :open_mode;
 export import :seek_mode;
 export import :error;
 export import :file_descriptor;
+export import :is_file_descriptor;
+export import :is_borroweable_file_descriptor;
 
 // Cross Platform
 export import :file_reader;
@@ -14,3 +16,4 @@ export import :file_opener;
 export import :socket_file;
 export import :dir;
 export import :pipe;
+export import :stdstream;

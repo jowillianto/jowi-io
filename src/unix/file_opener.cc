@@ -17,6 +17,11 @@ namespace moderna::io {
   };
   using unix_fd = file_descriptor<int, file_closer>;
 
+  /*
+    file_opener
+    This is a builder - factory function that builds upon a file opener and then opens a file
+    with those properties in mind.
+  */
   export template <open_mode mode = open_mode::read> struct file_opener {
     file_opener(std::filesystem::path path) noexcept : __path{std::move(path)} {}
     file_opener(
@@ -29,23 +34,35 @@ namespace moderna::io {
       __auto_create = true;
       return *this;
     }
+    file_opener &dont_automatically_create() noexcept {
+      __auto_create = false;
+      return *this;
+    }
     file_opener &with_permission(int permission_bit) noexcept {
       __permission_bit = permission_bit;
       return *this;
     }
-    std::expected<rw_file<unix_fd, mode>, fs_error> open() const noexcept {
-      int fd = ::open(__path.c_str(), __get_open_flags(), __permission_bit);
-      int err_no = errno;
-      if (fd == -1) {
-        return std::unexpected{fs_error{err_no, strerror(err_no)}};
-      }
-      return rw_file<unix_fd, mode>{unix_fd{fd}};
+    /*
+      Write cross mode open()
+    */
+    std::expected<rw_file<unix_fd, mode>, fs_error> open() const {
+      return __open().transform([](auto &&fd) { return rw_file<unix_fd, mode>{std::move(fd)}; }
+      ).transform_error(cp_adapter::make_error);
     }
 
   private:
     std::filesystem::path __path;
     bool __auto_create = true;
     int __permission_bit = 0666;
+
+    std::expected<unix_fd, int> __open() const noexcept {
+      int fd = ::open(__path.c_str(), __get_open_flags(), __permission_bit);
+      int err_no = errno;
+      if (fd == -1) {
+        return std::unexpected{err_no};
+      }
+      return unix_fd{fd};
+    }
 
     constexpr int __get_open_flags() const noexcept {
       if constexpr (mode == open_mode::read) {

@@ -13,8 +13,10 @@ import :file;
 import :file_opener;
 import :error;
 import :is_file_descriptor;
+import :borrowed_file_descriptor;
 import :file_reader;
 import :file_writer;
+import :file_poller;
 
 namespace moderna::io {
   /*
@@ -22,18 +24,49 @@ namespace moderna::io {
     this represents a tcp connection between the client and the server.
   */
   export template <is_file_descriptor fd_t> struct tcp_connection {
+    using borrowed_fd = borrowed_file_descriptor<native_handle_type<fd_t>>;
     tcp_connection(fd_t fd, struct sockaddr_in addr) noexcept :
       __fd{std::move(fd)}, __addr{std::move(addr)} {}
-    tcp_connection(tcp_connection &&) noexcept = default;
-    tcp_connection(const tcp_connection &) = default;
-    tcp_connection &operator=(tcp_connection &&) noexcept = default;
-    tcp_connection &operator=(const tcp_connection &) = default;
 
-    auto get_reader() const noexcept {
-      return file_reader{__fd.borrow()};
+    /*
+    read with a specific reader
+    */
+    template <is_readable<borrowed_fd> reader_t> auto read(const reader_t &reader) const {
+      return reader.read(fd());
     }
-    auto get_writer() const noexcept {
-      return file_writer{__fd.borrow()};
+    /*
+      write with a specific writer
+    */
+    template <class write_t, is_writable<borrowed_fd, write_t> writer_t>
+    auto write(write_t &&w, const writer_t &writer) const {
+      return writer.write(fd(), std::forward<write_t>(w));
+    }
+
+    /*
+      Additional shortcut functions for read and write.
+    */
+    std::expected<std::string, fs_error> read(size_t nbytes) const {
+      return read(str_reader{nbytes});
+    }
+    std::expected<char, fs_error> read_one() const {
+      return read(char_reader{});
+    }
+    std::expected<void, fs_error> write(std::string_view d) const {
+      return write(d, str_writer{});
+    }
+    std::expected<void, fs_error> write_one(char x) const {
+      return write(x, char_writer{});
+    }
+
+    /*
+      Read or non readable
+    */
+    // Readable or non readable
+    std::expected<bool, fs_error> is_readable(int timeout = 0) const {
+      return file_poller::make_read_poller(timeout).poll_binary(fd());
+    }
+    std::expected<bool, fs_error> is_writable(int timeout = 0) const {
+      return file_poller::make_read_poller(timeout).poll_binary(fd());
     }
 
     /*
@@ -48,6 +81,13 @@ namespace moderna::io {
     */
     int port() const {
       return htons(__addr.sin_port);
+    }
+
+    tcp_connection<borrowed_fd> borrow() const noexcept {
+      return tcp_connection{fd(), __addr};
+    }
+    borrowed_fd fd() const noexcept {
+      return __fd.borrow();
     }
 
     static std::expected<tcp_connection, fs_error> create(

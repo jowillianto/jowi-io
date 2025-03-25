@@ -8,6 +8,7 @@ module;
 export module moderna.io:pipe;
 import :file;
 import :file_descriptor;
+import :borrowed_file_descriptor;
 import :error;
 import :file_reader;
 import :file_writer;
@@ -20,8 +21,22 @@ namespace moderna::io {
     This represents a pipe between two file descriptors.
   */
   export template <is_file_descriptor write_desc_t, is_file_descriptor read_desc_t> struct pipe {
-    file_reader<read_desc_t> reader;
-    file_writer<write_desc_t> writer;
+    using borrowed_reader_fd = borrowed_file_descriptor<native_handle_type<write_desc_t>>;
+    using borrowed_writer_fd = borrowed_file_descriptor<native_handle_type<read_desc_t>>;
+    writable_file<write_desc_t> writer;
+    readable_file<read_desc_t> reader;
+
+    borrowed_writer_fd write_fd() const noexcept {
+      return writer.borrow();
+    }
+
+    borrowed_reader_fd reader_fd() const noexcept {
+      return reader.borrow();
+    }
+
+    pipe<borrowed_writer_fd, borrowed_reader_fd> borrow() const noexcept {
+      return pipe<borrowed_writer_fd, borrowed_reader_fd>{writer.borrow(), reader.borrow()};
+    }
   };
   export struct pipe_creator {
     pipe_creator(bool non_blocking = false) : __non_blocking{non_blocking} {}
@@ -32,16 +47,16 @@ namespace moderna::io {
       if (err_no == -1) {
         return std::unexpected{fs_error{err_no, strerror(err_no)}};
       }
-      auto reader = file_reader{unix_fd{pipefd[0]}};
-      auto writer = file_writer{unix_fd{pipefd[1]}};
+      auto read_f = readable_file{unix_fd{pipefd[0]}};
+      auto write_f = writable_file{unix_fd{pipefd[1]}};
       if (__non_blocking) {
-        return __mark_fd_as_non_blocking(reader.fd())
-          .and_then([&]() { return __mark_fd_as_non_blocking(writer.fd()); })
+        return __mark_fd_as_non_blocking(read_f.fd())
+          .and_then([&]() { return __mark_fd_as_non_blocking(write_f.fd()); })
           .transform([&]() {
-            return pipe{std::move(reader), std::move(writer)};
+            return pipe{std::move(write_f), std::move(read_f)};
           });
       }
-      return pipe{std::move(reader), std::move(writer)};
+      return pipe{std::move(write_f), std::move(read_f)};
     }
 
   private:

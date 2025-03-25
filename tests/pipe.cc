@@ -7,6 +7,12 @@ namespace io = moderna::io;
 #include <moderna/test_lib.hpp>
 #include <utility>
 
+MODERNA_SETUP(argc, argv) {
+  test_lib::get_test_context().set_thread_count(1).set_time_unit(
+    test_lib::test_time_unit::MILLI_SECONDS
+  );
+}
+
 MODERNA_ADD_TEST(pipe_create) {
   auto pipe = io::pipe_creator{}.open();
   test_lib::assert_expected(pipe);
