@@ -31,6 +31,20 @@ namespace moderna::io {
     }
   };
 
+  export class line_writer {
+  private:
+    char __delim;
+
+  public:
+    line_writer(char delim = '\n') : __delim{delim} {}
+    std::expected<void, fs_error> write(is_borroweable_file_descriptor auto fd, std::string_view v)
+      const {
+      return str_writer{}.write(fd.borrow(), v).and_then([&]() {
+        return char_writer{}.write(fd.borrow(), '\n');
+      });
+    }
+  };
+
   export struct csv_writer {
     csv_writer(char delim = ',') : __delim{delim} {}
     std::expected<void, fs_error> write(
