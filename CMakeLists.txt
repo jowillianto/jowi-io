@@ -6,11 +6,16 @@ set (CMAKE_CXX_SCAN_FOR_MODULES true)
 
 option (MODERNA_IO_BUILD_TESTS "Build tests" OFF)
 
+if (NOT moderna_generic)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/moderna-generic)
+endif()
+
 if (NOT TARGET ${PROJECT_NAME})
   file(
     GLOB ${PROJECT_NAME}_src 
       ${CMAKE_CURRENT_LIST_DIR}/src/*.cc
-      ${CMAKE_CURRENT_LIST_DIR}/src/file_descriptor/*.cc
+      ${CMAKE_CURRENT_LIST_DIR}/src/reader_writer/*.cc
+
     )
   if (WIN32)
     file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/win32/*.cc)
@@ -21,6 +26,10 @@ if (NOT TARGET ${PROJECT_NAME})
   target_sources(${PROJECT_NAME}
     PUBLIC
       FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_src_sys_call}
+  )
+  target_link_libraries(${PROJECT_NAME} 
+    PRIVATE 
+      moderna_generic
   )
 endif()
 

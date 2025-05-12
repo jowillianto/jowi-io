@@ -1,5 +1,9 @@
 module;
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/errno.h>
 #include <sys/file.h>
+#include <sys/socket.h>
 #include <expected>
 #include <filesystem>
 #include <unistd.h>
@@ -7,81 +11,165 @@ export module moderna.io:file_opener;
 import :file_descriptor;
 import :open_mode;
 import :error;
-import :rw_file;
+import :generic_file;
+import :fd_type;
+import :file_unblocker;
 
 namespace moderna::io {
-  struct file_closer {
-    void operator()(int fd) const noexcept {
-      close(fd);
+  namespace fs = std::filesystem;
+
+  constexpr int get_open_flags(open_mode mode, bool auto_create) noexcept {
+    if (mode == open_mode::read) {
+      return O_RDONLY;
+    } else if (mode == open_mode::write_truncate) {
+      if (auto_create) {
+        return O_WRONLY | O_CREAT | O_TRUNC;
+      } else {
+        return O_WRONLY | O_TRUNC;
+      }
+    } else if (mode == open_mode::write_append) {
+      if (auto_create) {
+        return O_WRONLY | O_CREAT | O_APPEND;
+      } else {
+        return O_WRONLY | O_APPEND;
+      }
+    } else {
+      return O_RDWR;
     }
-  };
-  using unix_fd = file_descriptor<int, file_closer>;
+  }
 
   /*
-    file_opener
-    This is a builder - factory function that builds upon a file opener and then opens a file
-    with those properties in mind.
+    Opens a local file.
   */
-  export template <open_mode mode = open_mode::read> struct file_opener {
-    file_opener(std::filesystem::path path) noexcept : __path{std::move(path)} {}
-    file_opener(
-      std::filesystem::path path, bool auto_create, int create_permission_bit = 0666
-    ) noexcept :
-      __path{std::move(path)},
-      __auto_create{auto_create}, __permission_bit{create_permission_bit} {}
+  export std::expected<generic_file<file_type, true, true, true, true, true>, fs_error> open_file(
+    const fs::path &p, open_mode mode, bool auto_create = true
+  ) {
+    int open_flags = get_open_flags(mode, auto_create);
+    int fd = open(p.c_str(), get_open_flags(mode, auto_create), 0666);
+    int err_no = errno;
+    if (fd == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    return generic_file<file_type, true, true, true, true, true>{file_type{fd}};
+  }
 
-    file_opener &automatically_create() noexcept {
-      __auto_create = true;
-      return *this;
-    }
-    file_opener &dont_automatically_create() noexcept {
-      __auto_create = false;
-      return *this;
-    }
-    file_opener &with_permission(int permission_bit) noexcept {
-      __permission_bit = permission_bit;
-      return *this;
-    }
-    /*
-      Write cross mode open()
-    */
-    std::expected<rw_file<unix_fd, mode>, fs_error> open() const {
-      return __open().transform([](auto &&fd) { return rw_file<unix_fd, mode>{std::move(fd)}; }
-      ).transform_error(cp_adapter::make_error);
-    }
+  /*
+    Opens a local file
+  */
+  export template <open_mode mode> auto open_file(const fs::path &p, bool auto_create = true) {
+    constexpr bool is_readable =
+      mode != open_mode::write_append || mode != open_mode::write_truncate;
+    constexpr bool is_writable = mode != open_mode::read;
+    return open_file(p, mode, auto_create).transform([](auto &&file) {
+      return generic_file<file_type, is_readable, is_writable, true, true, true>{std::move(file).fd(
+      )};
+    });
+  }
 
-  private:
-    std::filesystem::path __path;
-    bool __auto_create = true;
-    int __permission_bit = 0666;
-
-    std::expected<unix_fd, int> __open() const noexcept {
-      int fd = ::open(__path.c_str(), __get_open_flags(), __permission_bit);
-      int err_no = errno;
-      if (fd == -1) {
-        return std::unexpected{err_no};
-      }
-      return unix_fd{fd};
+  /*
+    Opens a pipe
+  */
+  export std::expected<pipe_file<file_type>, fs_error> open_pipe(
+    bool non_blocking = true
+  ) noexcept {
+    std::array<int, 2> pipe_fd;
+    int res = pipe(pipe_fd.data());
+    int err_no = errno;
+    if (err_no == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
     }
-
-    constexpr int __get_open_flags() const noexcept {
-      if constexpr (mode == open_mode::read) {
-        return O_RDONLY;
-      } else if constexpr (mode == open_mode::write_truncate) {
-        if (__auto_create) {
-          return O_WRONLY | O_CREAT | O_TRUNC;
-        } else {
-          return O_WRONLY | O_TRUNC;
-        }
-      } else if constexpr (mode == open_mode::write_append) {
-        if (__auto_create) {
-          return O_WRONLY | O_CREAT | O_APPEND;
-        } else {
-          return O_WRONLY | O_APPEND;
-        }
-      } else {
-        return O_RDWR;
-      }
+    auto pipe =
+      pipe_file<file_type>{.reader{file_type{pipe_fd[0]}}, .writer{file_type{pipe_fd[1]}}};
+    if (!non_blocking) {
+      return std::move(pipe);
     }
-  };
+    return pipe.reader.apply_operation(file_unblocker{}).and_then([&]() {
+      return pipe.writer.apply_operation(file_unblocker{}).transform([&]() {
+        return std::move(pipe);
+      });
+    });
+  }
+
+  export std::expected<tcp_host<file_type>, fs_error> listen(
+    int port, int backlog = 50, bool non_blocking = true
+  ) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    int err_no = errno;
+    if (fd == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    file_type controlled_fd{fd};
+    // Bind Socket
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    int bind_res = ::bind(fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
+    err_no = errno;
+    if (bind_res == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    int listen_res = ::listen(fd, backlog);
+    err_no = errno;
+    if (listen_res == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    auto host =
+      tcp_host<file_type>{.file{std::move(controlled_fd)}, .host{inet_ntoa(addr.sin_addr), port}};
+    if (!non_blocking) {
+      return std::move(host);
+    }
+    return host.file.apply_operation(file_unblocker{}).transform([&]() { return std::move(host); });
+  }
+
+  export std::expected<tcp_connection<file_type>, fs_error> connect(
+    std::string_view ip, int port, bool non_blocking = true
+  ) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    int err_no = errno;
+    if (fd == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    file_type controlled_fd{fd};
+    // Bind Socket
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    int connect_res = ::connect(fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
+    err_no = errno;
+    if (connect_res == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    auto connection = tcp_connection<file_type>{
+      .file{std::move(controlled_fd)},
+      .host{.ip{inet_ntoa(addr.sin_addr)}, .port = addr.sin_port},
+      .client{.ip{std::string{ip}}, .port = port}
+    };
+    if (!non_blocking) {
+      return std::move(connection);
+    }
+    return connection.file.apply_operation(file_unblocker{}).transform([&]() {
+      return std::move(connection);
+    });
+  }
+
+  export std::expected<tcp_connection<file_type>, fs_error> accept(
+    const tcp_host<file_type> &host
+  ) {
+    struct sockaddr_in addr;
+    socklen_t addr_size = sizeof(addr);
+    int accept_fd = ::accept(
+      get_native_handle(host.file), reinterpret_cast<struct sockaddr *>(&addr), &addr_size
+    );
+    int err_no = errno;
+    if (accept_fd == -1) {
+      return std::unexpected{fs_error::make(err_no, strerror(err_no))};
+    }
+    return tcp_connection<file_type>{
+      .file{file_type{accept_fd}},
+      .host{host.host},
+      .client{.ip{inet_ntoa(addr.sin_addr)}, .port = addr.sin_port}
+    };
+  }
 }

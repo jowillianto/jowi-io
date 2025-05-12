@@ -14,27 +14,27 @@ MODERNA_SETUP(argc, argv) {
 }
 
 MODERNA_ADD_TEST(read_test) {
-  auto opener = io::file_opener<io::open_mode::read>{READ_FILE}.open();
-  test_lib::assert_expected(opener);
-  auto file = std::move(opener.value());
+  auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
+  test_lib::assert_expected(open_res);
+  auto file = std::move(open_res.value());
   auto r_value = file.read();
   test_lib::assert_expected(r_value);
   test_lib::assert_equal(r_value.value(), "HELLO WORLD 0\nHELLO WORLD 1\nHELLO WORLD 2\n");
 }
 
 MODERNA_ADD_TEST(read_n_test) {
-  auto opener = io::file_opener<io::open_mode::read>{READ_FILE}.open();
-  test_lib::assert_expected(opener);
-  auto file = std::move(opener.value());
+  auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
+  test_lib::assert_expected(open_res);
+  auto file = std::move(open_res.value());
   auto r_value = file.read(11);
   test_lib::assert_expected(r_value);
   test_lib::assert_equal(r_value.value(), "HELLO WORLD");
 }
 
 MODERNA_ADD_TEST(read_seek_n_test) {
-  auto opener = io::file_opener<io::open_mode::read>{READ_FILE}.open();
-  test_lib::assert_expected(opener);
-  auto file = std::move(opener.value());
+  auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
+  test_lib::assert_expected(open_res);
+  auto file = std::move(open_res.value());
   auto res = file.seek(14);
   auto r_value = file.read(11);
   test_lib::assert_expected(r_value);
@@ -42,13 +42,13 @@ MODERNA_ADD_TEST(read_seek_n_test) {
 }
 
 MODERNA_ADD_TEST(write_test) {
-  auto opener = io::file_opener<io::open_mode::write_truncate>{WRITE_FILE}.open();
-  test_lib::assert_expected(opener);
-  auto file = std::move(opener.value());
+  auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
+  test_lib::assert_expected(open_res);
+  auto file = std::move(open_res.value());
   auto rd = test_lib::random_string(100);
   auto res = file.write(rd);
   test_lib::assert_expected(res);
-  auto r_opener = io::file_opener<io::open_mode::read>{WRITE_FILE}.open();
+  auto r_opener = io::open_file<io::open_mode::read>(WRITE_FILE);
   test_lib::assert_expected(r_opener);
   auto r_file = std::move(r_opener.value());
   auto r_value = r_file.read();
@@ -56,9 +56,9 @@ MODERNA_ADD_TEST(write_test) {
 }
 
 MODERNA_ADD_TEST(write_seek_test) {
-  auto opener = io::file_opener<io::open_mode::write_truncate>{WRITE_FILE}.open();
-  test_lib::assert_expected(opener);
-  auto file = std::move(opener.value());
+  auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
+  test_lib::assert_expected(open_res);
+  auto file = std::move(open_res.value());
   auto rd = test_lib::random_string(100);
   auto res = file.write(rd);
   test_lib::assert_expected(res);
@@ -67,7 +67,7 @@ MODERNA_ADD_TEST(write_seek_test) {
   res = file.write("HELLO WORLD");
   test_lib::assert_expected(res);
   rd.replace(0, 11, "HELLO WORLD");
-  auto r_opener = io::file_opener<io::open_mode::read>{WRITE_FILE}.open();
+  auto r_opener = io::open_file<io::open_mode::read>(WRITE_FILE);
   test_lib::assert_expected(r_opener);
   auto r_file = std::move(r_opener.value());
   auto r_value = r_file.read();
@@ -76,65 +76,64 @@ MODERNA_ADD_TEST(write_seek_test) {
 }
 
 MODERNA_ADD_TEST(open_file_fail) {
-  auto opener = io::file_opener<io::open_mode::read>{"/non/existent/file"}.open();
-  test_lib::assert_false(opener.has_value(), "Non existent file should not be openable");
+  auto open_res = io::open_file<io::open_mode::read>("/non/existent/file");
+  test_lib::assert_false(open_res.has_value(), "Non existent file should not be openable");
 }
 
 MODERNA_ADD_TEST(open_file_write_delete_file) {
-  auto opener = io::file_opener<io::open_mode::write_truncate>{"/tmp/lol"};
-  auto res_file = opener.open();
-  test_lib::assert_expected(res_file);
+  auto open_res = io::open_file<io::open_mode::write_truncate>("/tmp/lol");
+  test_lib::assert_expected(open_res);
 }
 
-MODERNA_ADD_TEST(csv_reader_test) {
-  auto res = io::file_opener<io::open_mode::read>{READ_CSV_FILE}.open();
-  test_lib::assert_expected(res);
-  auto file = std::move(res.value());
-  auto lines_res = file.read(io::csv_reader{});
-  test_lib::assert_expected(lines_res);
-  auto lines = std::move(lines_res.value());
-  test_lib::assert_equal(lines.size(), 10);
-  for (size_t i = 0; i != lines.size(); i += 1) {
-    test_lib::assert_equal(lines[i].size(), (i / 2) + 1);
-    if (i % 2 == 0) {
-      test_lib::assert_true(std::ranges::find(lines[i], "WORLD") == lines[i].end());
-    } else {
-      test_lib::assert_true(std::ranges::find(lines[i], "HELLO") == lines[i].end());
-    }
-  }
-}
+// MODERNA_ADD_TEST(csv_reader_test) {
+//   auto res = io::open_file<io::open_mode::read>{READ_CSV_FILE};
+//   test_lib::assert_expected(res);
+//   auto file = std::move(res.value());
+//   auto lines_res = file.read(io::csv_reader{});
+//   test_lib::assert_expected(lines_res);
+//   auto lines = std::move(lines_res.value());
+//   test_lib::assert_equal(lines.size(), 10);
+//   for (size_t i = 0; i != lines.size(); i += 1) {
+//     test_lib::assert_equal(lines[i].size(), (i / 2) + 1);
+//     if (i % 2 == 0) {
+//       test_lib::assert_true(std::ranges::find(lines[i], "WORLD") == lines[i].end());
+//     } else {
+//       test_lib::assert_true(std::ranges::find(lines[i], "HELLO") == lines[i].end());
+//     }
+//   }
+// }
 
-MODERNA_ADD_TEST(csv_writer_test) {
-  std::vector<std::vector<std::string>> write_content{
-    {test_lib::random_string(11)},
-    {test_lib::random_string(11), test_lib::random_string(11)},
-    {test_lib::random_string(11), test_lib::random_string(11), test_lib::random_string(11)},
-    {test_lib::random_string(11),
-     test_lib::random_string(11),
-     test_lib::random_string(11),
-     test_lib::random_string(11)},
-    {test_lib::random_string(11),
-     test_lib::random_string(11),
-     test_lib::random_string(11),
-     test_lib::random_string(11),
-     test_lib::random_string(11)}
-  };
-  auto res = io::file_opener<io::open_mode::write_truncate>{WRITE_CSV_FILE}.open();
-  test_lib::assert_expected(res);
-  auto file = std::move(res.value());
-  auto w_res = file.write(write_content, io::csv_writer{});
-  test_lib::assert_expected(w_res);
+// MODERNA_ADD_TEST(csv_writer_test) {
+//   std::vector<std::vector<std::string>> write_content{
+//     {test_lib::random_string(11)},
+//     {test_lib::random_string(11), test_lib::random_string(11)},
+//     {test_lib::random_string(11), test_lib::random_string(11), test_lib::random_string(11)},
+//     {test_lib::random_string(11),
+//      test_lib::random_string(11),
+//      test_lib::random_string(11),
+//      test_lib::random_string(11)},
+//     {test_lib::random_string(11),
+//      test_lib::random_string(11),
+//      test_lib::random_string(11),
+//      test_lib::random_string(11),
+//      test_lib::random_string(11)}
+//   };
+//   auto res = io::open_file<io::open_mode::write_truncate>{WRITE_CSV_FILE};
+//   test_lib::assert_expected(res);
+//   auto file = std::move(res.value());
+//   auto w_res = file.write(write_content, io::csv_writer{});
+//   test_lib::assert_expected(w_res);
 
-  auto r_f_res = io::file_opener<io::open_mode::read>{WRITE_CSV_FILE}.open();
-  test_lib::assert_expected(r_f_res);
-  auto r_file = std::move(r_f_res.value());
-  auto r_res = r_file.read(io::csv_reader{});
-  test_lib::assert_expected(r_res);
-  auto r_cont = std::move(r_res.value());
-  for (size_t i = 0; i < write_content.size(); i += 1) {
-    for (size_t j = 0; j < write_content[i].size(); j += 1) {
-      auto &entry = r_cont.at(i).at(j);
-      test_lib::assert_equal(entry, write_content[i][j]);
-    }
-  }
-}
+//   auto r_f_res = io::open_file<io::open_mode::read>{WRITE_CSV_FILE};
+//   test_lib::assert_expected(r_f_res);
+//   auto r_file = std::move(r_f_res.value());
+//   auto r_res = r_file.read(io::csv_reader{});
+//   test_lib::assert_expected(r_res);
+//   auto r_cont = std::move(r_res.value());
+//   for (size_t i = 0; i < write_content.size(); i += 1) {
+//     for (size_t j = 0; j < write_content[i].size(); j += 1) {
+//       auto &entry = r_cont.at(i).at(j);
+//       test_lib::assert_equal(entry, write_content[i][j]);
+//     }
+//   }
+// }

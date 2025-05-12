@@ -14,12 +14,12 @@ MODERNA_SETUP(argc, argv) {
 }
 
 MODERNA_ADD_TEST(pipe_create) {
-  auto pipe = io::pipe_creator{}.open();
+  auto pipe = io::open_pipe();
   test_lib::assert_expected(pipe);
 }
 
 MODERNA_ADD_TEST(pipe_simple_rw) {
-  auto pipe_res = io::pipe_creator{true}.open();
+  auto pipe_res = io::open_pipe();
   test_lib::assert_expected(pipe_res);
   auto pipe = std::move(pipe_res.value());
   auto msg = test_lib::random_string(100);
@@ -31,22 +31,22 @@ MODERNA_ADD_TEST(pipe_simple_rw) {
 }
 
 MODERNA_ADD_TEST(pipe_check_data_noexist) {
-  auto pipe_res = io::pipe_creator{true}.open();
+  auto pipe_res = io::open_pipe();
   test_lib::assert_expected(pipe_res);
   auto pipe = std::move(pipe_res.value());
-  auto is_readable_res = pipe.reader.is_readable();
+  auto is_readable_res = pipe.reader.is_read_ready();
   test_lib::assert_expected(is_readable_res);
   test_lib::assert_equal(is_readable_res.value(), false);
 }
 
 MODERNA_ADD_TEST(pipe_check_data_exist) {
-  auto pipe_res = io::pipe_creator{true}.open();
+  auto pipe_res = io::open_pipe();
   test_lib::assert_expected(pipe_res);
   auto pipe = std::move(pipe_res.value());
   auto msg = test_lib::random_string(100);
   auto write_res = pipe.writer.write(msg);
   test_lib::assert_expected(write_res);
-  auto is_readable_res = pipe.reader.is_readable();
+  auto is_readable_res = pipe.reader.is_read_ready();
   test_lib::assert_expected(is_readable_res);
   test_lib::assert_equal(is_readable_res.value(), true);
 }

@@ -1,29 +1,38 @@
 module;
-#include <array>
 #include <cstring>
+#include <exception>
 #include <string_view>
 export module moderna.io:error;
-
+import moderna.generic;
 namespace moderna::io {
-  export struct fs_error {
-    int err_code;
-    std::array<char, 32> err_msg;
+  export class fs_error : public std::exception {
+    int __code;
+    generic::static_string<32> __msg;
 
-    fs_error(int err_code, const char *msg) noexcept {
-      err_code = err_code;
-      strncpy(err_msg.data(), msg, err_msg.size() - 1);
-      err_msg[err_msg.size() - 1] = '\0';
+  public:
+    constexpr fs_error(int err_code, generic::static_string<32> msg) noexcept :
+      __code{err_code}, __msg{std::move(msg)} {}
+
+    constexpr int err_code() const noexcept {
+      return __code;
     }
-    fs_error(const fs_error &) = default;
-    fs_error(fs_error &&) noexcept = default;
-    fs_error &operator=(const fs_error &) = default;
-    fs_error &operator=(fs_error &&) noexcept = default;
 
     const char *what() const noexcept {
-      return err_msg.data();
+      return __msg.begin();
     }
+
     std::string_view msg_view() const noexcept {
-      return std::string_view{err_msg.data()};
+      return __msg.as_view();
+    }
+
+    template <size_t N>
+    static constexpr fs_error make(int err_code, const char (&msg)[N])
+      requires(N <= 32)
+    {
+      return fs_error{err_code, generic::make_static_string(msg).template resize<N>()};
+    }
+    static constexpr fs_error make(int err_code, std::string_view v) {
+      return fs_error{err_code, generic::static_string<32>(v)};
     }
   };
 }

@@ -1,19 +1,14 @@
 export module moderna.io;
-export import :file;
 export import :open_mode;
 export import :seek_mode;
 export import :error;
 export import :file_descriptor;
-export import :is_file_descriptor;
-export import :is_borroweable_file_descriptor;
-
+export import :generic_file;
+export import :is_file;
 // Cross Platform
-export import :file_reader;
-export import :file_writer;
+export import :basic_io;
+export import :fd_type;
 export import :file_syncer;
 export import :file_seeker;
 export import :file_opener;
-export import :socket_file;
-export import :dir;
-export import :pipe;
-export import :stdstream;
+export import :file_unblocker;
