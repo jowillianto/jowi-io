@@ -17,26 +17,27 @@ namespace moderna::io {
     amount read at buffer_size.
   */
   export template <size_t buffer_size> struct basic_reader {
-    size_t read_count = buffer_size;
-    struct result_type {
+    const size_t read_count = buffer_size;
+    struct result_type { 
       std::array<char, buffer_size + 1> buffer;
       size_t size;
     };
     std::expected<result_type, fs_error> operator()(const is_basic_file auto &file) const noexcept {
-      std::array<char, buffer_size + 1> buffer;
+      result_type res{.size = 0};
       int amount_to_read = std::min(read_count, buffer_size);
       int amount_read =
-        read(get_native_handle(file), static_cast<void *>(buffer.data()), amount_to_read);
+        read(get_native_handle(file), static_cast<void *>(res.buffer.data()), amount_to_read);
       int err_no = errno;
       if (amount_read == -1) {
-        if (err_no == EWOULDBLOCK) {
-          return result_type{buffer, 0};
+        if (err_no == EWOULDBLOCK || err_no == EAGAIN) {
+          return res;
         } else {
           return std::unexpected{fs_error::make(err_no, strerror(err_no))};
         }
       }
-      buffer[amount_read] = '\0';
-      return result_type{buffer, static_cast<size_t>(amount_read)};
+      res.size = static_cast<size_t>(amount_read);
+      res.buffer[amount_read] = '\0';
+      return res;
     }
   };
 
