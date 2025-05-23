@@ -155,6 +155,12 @@ namespace moderna::io {
     fd_type fd() && {
       return std::move(__fd);
     }
+    /*
+      close will not necessarilly close the file, it will only move the current fd out of context.
+    */
+    void close() {
+      auto fd = std::move(__fd);
+    }
   };
 
   export template <is_file_descriptor fd_type> struct pipe_file {
