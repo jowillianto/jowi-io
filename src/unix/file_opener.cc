@@ -1,5 +1,6 @@
 module;
 #include <arpa/inet.h>
+#include <sys/fcntl.h>
 #include <netinet/in.h>
 #include <sys/errno.h>
 #include <sys/file.h>
@@ -45,7 +46,7 @@ namespace moderna::io {
     const fs::path &p, open_mode mode, bool auto_create = true
   ) {
     int open_flags = get_open_flags(mode, auto_create);
-    int fd = open(p.c_str(), get_open_flags(mode, auto_create), 0666);
+    int fd = open(p.c_str(), get_open_flags(mode, auto_create) | O_CLOEXEC, 0666);
     int err_no = errno;
     if (fd == -1) {
       return std::unexpected{fs_error::make(err_no, strerror(err_no))};
@@ -80,11 +81,8 @@ namespace moderna::io {
     }
     auto pipe =
       pipe_file<file_type>{.reader{file_type{pipe_fd[0]}}, .writer{file_type{pipe_fd[1]}}};
-    if (!non_blocking) {
-      return std::move(pipe);
-    }
-    return pipe.reader.apply_operation(file_unblocker{}).and_then([&]() {
-      return pipe.writer.apply_operation(file_unblocker{}).transform([&]() {
+    return pipe.reader.apply_operation(file_unblocker{non_blocking, true}).and_then([&]() {
+      return pipe.writer.apply_operation(file_unblocker{non_blocking, true}).transform([&]() {
         return std::move(pipe);
       });
     });
@@ -116,10 +114,9 @@ namespace moderna::io {
     }
     auto host =
       tcp_host<file_type>{.file{std::move(controlled_fd)}, .host{inet_ntoa(addr.sin_addr), port}};
-    if (!non_blocking) {
+    return host.file.apply_operation(file_unblocker{non_blocking}).transform([&]() {
       return std::move(host);
-    }
-    return host.file.apply_operation(file_unblocker{}).transform([&]() { return std::move(host); });
+    });
   }
 
   export std::expected<tcp_connection<file_type>, fs_error> connect(
@@ -146,10 +143,7 @@ namespace moderna::io {
       .host{.ip{inet_ntoa(addr.sin_addr)}, .port = addr.sin_port},
       .client{.ip{std::string{ip}}, .port = port}
     };
-    if (!non_blocking) {
-      return std::move(connection);
-    }
-    return connection.file.apply_operation(file_unblocker{}).transform([&]() {
+    return connection.file.apply_operation(file_unblocker{non_blocking}).transform([&]() {
       return std::move(connection);
     });
   }

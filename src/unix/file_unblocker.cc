@@ -11,13 +11,18 @@ import :is_file;
 namespace moderna::io {
   export struct file_unblocker {
     using result_type = void;
-    bool block_file = false;
+    bool non_blocking = true;
+    bool close_on_exec = false;
     constexpr int get_flags(int current_flags) const noexcept {
-      if (block_file) {
-        return current_flags & (~O_NONBLOCK);
+      if (non_blocking) {
+        current_flags |= O_NONBLOCK;
       } else {
-        return current_flags | O_NONBLOCK;
+        current_flags &= (~O_NONBLOCK);
       }
+      if (close_on_exec) {
+        current_flags |= O_CLOEXEC;
+      }
+      return current_flags;
     }
     std::expected<void, fs_error> operator()(const is_basic_file auto &file) const noexcept {
       int current_flags = fcntl(get_native_handle(file), F_GETFD, 0);
