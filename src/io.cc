@@ -5,6 +5,7 @@ export import :error;
 export import :file_descriptor;
 export import :generic_file;
 export import :is_file;
+export import :str_reader;
 // Cross Platform
 export import :basic_io;
 export import :fd_type;

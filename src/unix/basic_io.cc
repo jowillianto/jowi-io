@@ -18,25 +18,24 @@ namespace moderna::io {
   */
   export template <size_t buffer_size> struct basic_reader {
     const size_t read_count = buffer_size;
-    struct result_type { 
+    struct result_type {
       std::array<char, buffer_size + 1> buffer;
       size_t size;
     };
     std::expected<result_type, fs_error> operator()(const is_basic_file auto &file) const noexcept {
-      result_type res{.size = 0};
+      std::expected<result_type, fs_error> res{result_type{.size = 0}};
       int amount_to_read = std::min(read_count, buffer_size);
       int amount_read =
-        read(get_native_handle(file), static_cast<void *>(res.buffer.data()), amount_to_read);
+        read(get_native_handle(file), static_cast<void *>(res->buffer.data()), amount_to_read);
       int err_no = errno;
-      if (amount_read == -1) {
-        if (err_no == EWOULDBLOCK || err_no == EAGAIN) {
-          return res;
-        } else {
-          return std::unexpected{fs_error::make(err_no, strerror(err_no))};
-        }
+      if (amount_read == -1 && (err_no == EWOULDBLOCK || err_no == EAGAIN)) {
+        res->size = 0;
+      } else if (amount_read == -1) {
+        res = std::unexpected{fs_error::make(err_no, strerror(err_no))};
+      } else {
+        res->size = static_cast<size_t>(amount_read);
+        res->buffer[amount_read] = '\0';
       }
-      res.size = static_cast<size_t>(amount_read);
-      res.buffer[amount_read] = '\0';
       return res;
     }
   };
