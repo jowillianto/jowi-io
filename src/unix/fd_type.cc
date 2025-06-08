@@ -25,4 +25,5 @@ namespace moderna::io {
     Declares the native file descriptor type
   */
   export using file_type = file_descriptor<int, file_closer>;
+  export using file_handle_type = file_handle<int>;
 }

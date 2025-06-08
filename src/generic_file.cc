@@ -164,8 +164,10 @@ namespace moderna::io {
   };
 
   export template <is_file_descriptor fd_type> struct pipe_file {
-    generic_file<fd_type, true, false, false, true, false> reader;
-    generic_file<fd_type, false, true, false, true, false> writer;
+    using reader_file = generic_file<fd_type, true, false, false, true, false>;
+    using writer_file = generic_file<fd_type, false, true, false, true, false>;
+    reader_file reader;
+    writer_file writer;
   };
 
   export struct tcp_address {

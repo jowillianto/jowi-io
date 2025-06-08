@@ -59,7 +59,7 @@ namespace moderna::io {
   */
   export template <open_mode mode> auto open_file(const fs::path &p, bool auto_create = true) {
     constexpr bool is_readable =
-      mode != open_mode::write_append || mode != open_mode::write_truncate;
+      mode != open_mode::write_append && mode != open_mode::write_truncate;
     constexpr bool is_writable = mode != open_mode::read;
     return open_file(p, mode, auto_create).transform([](auto &&file) {
       return generic_file<file_type, is_readable, is_writable, true, true, true>{std::move(file).fd(

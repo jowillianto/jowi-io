@@ -15,24 +15,28 @@ namespace moderna::io {
     using result_type = std::string;
     const size_t read_count = -1;
     std::expected<std::string, fs_error> operator()(const is_basic_file auto &file) const {
-      std::expected<std::string, fs_error> buffer{std::string{}};
-      auto buffer_inserter = std::back_inserter(buffer.value());
-      size_t amount_left = read_count;
-      while (amount_left > 0) {
-        auto read_res = basic_reader<4096>{amount_left}(file);
-        if (!read_res) {
-          buffer = std::unexpected{std::move(read_res.error())};
-          break;
-        }
-        std::ranges::copy_n(read_res->buffer.begin(), read_res->size, buffer_inserter);
-        if (read_res->size == 4096) {
-          amount_left -= 4096;
-        } else {
-          amount_left = 0;
-          break;
-        }
+      std::string buffer{};
+      auto buffer_inserter = std::back_inserter(buffer);
+      return read_from_file<2048>(file, read_count, buffer_inserter).transform([&]() {
+        return std::move(buffer);
+      });
+    }
+    template <size_t buffer_size>
+    std::expected<void, fs_error> read_from_file(
+      const is_basic_file auto &file, size_t amount_left, std::back_insert_iterator<std::string> &it
+    ) const {
+      auto read_res = basic_reader<buffer_size>{amount_left}(file);
+      if (!read_res) {
+        return std::unexpected{std::move(read_res.error())};
       }
-      return buffer;
+      std::ranges::copy_n(read_res->buffer.begin(), read_res->size, it);
+      if (read_res->size == buffer_size) {
+        return read_from_file<std::min(buffer_size * 2, static_cast<size_t>(1048576))>(
+          file, amount_left - buffer_size, it
+        );
+      } else {
+        return {};
+      }
     }
   };
 
