@@ -10,28 +10,28 @@ if (NOT moderna_generic)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/moderna-generic)
 endif()
 
-if (NOT TARGET ${PROJECT_NAME})
-  file(
-    GLOB ${PROJECT_NAME}_src 
-      ${CMAKE_CURRENT_LIST_DIR}/src/*.cc
-      ${CMAKE_CURRENT_LIST_DIR}/src/reader_writer/*.cc
-
-    )
-  if (WIN32)
-    file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/win32/*.cc)
-  elseif(UNIX)
-    file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/unix/*.cc)
-  endif()
-  add_library(${PROJECT_NAME})
-  target_sources(${PROJECT_NAME}
-    PUBLIC
-      FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_src_sys_call}
-  )
-  target_link_libraries(${PROJECT_NAME} 
-    PRIVATE 
-      moderna_generic
-  )
+file(
+  GLOB ${PROJECT_NAME}_src 
+    ${CMAKE_CURRENT_LIST_DIR}/src/*.cc
+    ${CMAKE_CURRENT_LIST_DIR}/src/reader_writer/*.cc
+)
+if (WIN32)
+  file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/win32/*.cc)
+elseif(UNIX)
+  file (GLOB ${PROJECT_NAME}_src_sys_call ${CMAKE_CURRENT_LIST_DIR}/src/unix/*.cc)
 endif()
+
+add_library(${PROJECT_NAME})
+add_library(moderna::io ALIAS ${PROJECT_NAME})
+target_sources(${PROJECT_NAME}
+  PUBLIC
+    FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_src_sys_call}
+)
+target_link_libraries(${PROJECT_NAME} 
+  PRIVATE 
+    moderna::generic
+)
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
 
 if (MODERNA_IO_BUILD_TESTS)
   include (CTest)
@@ -39,26 +39,31 @@ if (MODERNA_IO_BUILD_TESTS)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/tests)
 endif()
 
-set (MODERNA_COMPONENT_NAME "io")
-include(GNUInstallDirs)
-install (
-  TARGETS ${PROJECT_NAME}
-  EXPORT moderna
-  FILE_SET 
-    CXX_MODULES 
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/moderna/${MODERNA_COMPONENT_NAME}
-    COMPONENT ${MODERNA_COMPONENT_NAME}_file_set
-  CXX_MODULES_BMI 
-    COMPONENT ${MODERNA_COMPONENT_NAME}
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/moderna/${MODERNA_COMPONENT_NAME}
-)
-
-if (PROJECT_IS_TOP_LEVEL)
-  install (
-    EXPORT moderna
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/moderna
-    FILE moderna-config.cmake
-    NAMESPACE moderna::
-    CXX_MODULES_DIRECTORY cxx_modules/moderna
+if (MODERNA_INSTALL)
+  include(GNUInstallDirs)
+  set (MODERNA_COMPONENT_NAME "io")
+  set_property(
+    TARGET ${PROJECT_NAME} 
+    PROPERTY EXPORT_NAME ${MODERNA_COMPONENT_NAME}
   )
+  install (
+    TARGETS ${PROJECT_NAME}
+    EXPORT moderna
+    FILE_SET 
+      CXX_MODULES 
+      DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/moderna/${MODERNA_COMPONENT_NAME}
+      COMPONENT ${MODERNA_COMPONENT_NAME}_file_set
+    CXX_MODULES_BMI 
+      COMPONENT ${MODERNA_COMPONENT_NAME}
+      DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/moderna/${MODERNA_COMPONENT_NAME}
+  )
+  if (NOT MODERNA_GLOBAL_INSTALL)
+    install (
+      EXPORT moderna
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}/moderna
+      FILE moderna-config.cmake
+      NAMESPACE moderna::
+      CXX_MODULES_DIRECTORY cxx_modules/moderna
+    )
+  endif()
 endif()
