@@ -76,7 +76,7 @@ namespace moderna::io {
     std::array<int, 2> pipe_fd;
     int res = pipe(pipe_fd.data());
     int err_no = errno;
-    if (err_no == -1) {
+    if (res == -1) {
       return std::unexpected{fs_error::make(err_no, strerror(err_no))};
     }
     auto pipe =

@@ -26,7 +26,7 @@ namespace moderna::io {
     }
 
     static file_poller write_poller(int timeout = 0) {
-      return file_poller{POLLWRITE, timeout};
+      return file_poller{POLLOUT, timeout};
     }
     static file_poller read_poller(int timeout = 0) {
       return file_poller{POLLIN, timeout};
