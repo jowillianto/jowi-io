@@ -5,6 +5,8 @@ TabWidth: 2
 ConstructorInitializerIndentWidth: 2
 IndentCaseLabels: true
 PenaltyReturnTypeOnItsOwnLine: 200
+RequiresClausePosition: WithPreceding
+IndentRequiresClause: false
 UseTab: Never
 SortIncludes: true
 SortUsingDeclarations: false

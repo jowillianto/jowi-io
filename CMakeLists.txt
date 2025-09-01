@@ -6,7 +6,7 @@ set (CMAKE_CXX_SCAN_FOR_MODULES true)
 
 option (MODERNA_IO_BUILD_TESTS "Build tests" OFF)
 
-if (NOT moderna_generic)
+if (NOT moderna::generic)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/moderna-generic)
 endif()
 

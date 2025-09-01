@@ -1,8 +1,10 @@
 import moderna.test_lib;
 import moderna.io;
+import moderna.generic;
 
 namespace test_lib = moderna::test_lib;
 namespace io = moderna::io;
+namespace generic = moderna::generic;
 
 #include <moderna/test_lib.hpp>
 #include <utility>
@@ -14,39 +16,26 @@ MODERNA_SETUP(argc, argv) {
 }
 
 MODERNA_ADD_TEST(pipe_create) {
-  auto pipe = io::open_pipe();
-  test_lib::assert_expected(pipe);
+  auto [r, w] = test_lib::assert_expected_value(io::open_pipe());
 }
 
 MODERNA_ADD_TEST(pipe_simple_rw) {
-  auto pipe_res = io::open_pipe();
-  test_lib::assert_expected(pipe_res);
-  auto pipe = std::move(pipe_res.value());
+  auto [r, w] = test_lib::assert_expected_value(io::open_pipe());
   auto msg = test_lib::random_string(100);
-  auto write_res = pipe.writer.write(msg);
-  test_lib::assert_expected(write_res);
-  auto read_res = pipe.reader.read();
-  test_lib::assert_expected(read_res);
-  test_lib::assert_equal(read_res.value(), msg);
+  test_lib::assert_expected(w.write(msg));
+  auto buf = generic::fixed_string<100>{};
+  test_lib::assert_expected(r.read(buf));
+  test_lib::assert_equal(buf, msg);
 }
 
 MODERNA_ADD_TEST(pipe_check_data_noexist) {
-  auto pipe_res = io::open_pipe();
-  test_lib::assert_expected(pipe_res);
-  auto pipe = std::move(pipe_res.value());
-  auto is_readable_res = pipe.reader.is_read_ready();
-  test_lib::assert_expected(is_readable_res);
-  test_lib::assert_equal(is_readable_res.value(), false);
+  auto [r, w] = test_lib::assert_expected_value(io::open_pipe());
+  test_lib::assert_false(test_lib::assert_expected_value(r.is_readable()));
 }
 
 MODERNA_ADD_TEST(pipe_check_data_exist) {
-  auto pipe_res = io::open_pipe();
-  test_lib::assert_expected(pipe_res);
-  auto pipe = std::move(pipe_res.value());
+  auto [r, w] = test_lib::assert_expected_value(io::open_pipe());
   auto msg = test_lib::random_string(100);
-  auto write_res = pipe.writer.write(msg);
-  test_lib::assert_expected(write_res);
-  auto is_readable_res = pipe.reader.is_read_ready();
-  test_lib::assert_expected(is_readable_res);
-  test_lib::assert_equal(is_readable_res.value(), true);
+  test_lib::assert_expected(w.write(msg));
+  test_lib::assert_true(test_lib::assert_expected_value(r.is_readable()));
 }
