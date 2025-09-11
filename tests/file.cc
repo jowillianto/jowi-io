@@ -1,19 +1,19 @@
-import moderna.test_lib;
-import moderna.io;
-#include <moderna/test_lib.hpp>
+import jowi.test_lib;
+import jowi.io;
+#include <jowi/test_lib.hpp>
 #include <algorithm>
 #include <utility>
 
-namespace test_lib = moderna::test_lib;
-namespace io = moderna::io;
+namespace test_lib = jowi::test_lib;
+namespace io = jowi::io;
 
-MODERNA_SETUP(argc, argv) {
+JOWI_SETUP(argc, argv) {
   test_lib::get_test_context().set_thread_count(1).set_time_unit(
     test_lib::test_time_unit::MILLI_SECONDS
   );
 }
 
-MODERNA_ADD_TEST(test_read) {
+JOWI_ADD_TEST(test_read) {
   auto f = io::make_byte_reader<2048>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -22,7 +22,7 @@ MODERNA_ADD_TEST(test_read) {
   );
 }
 
-MODERNA_ADD_TEST(test_read_small_buf) {
+JOWI_ADD_TEST(test_read_small_buf) {
   auto f = io::make_byte_reader<5>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -31,14 +31,14 @@ MODERNA_ADD_TEST(test_read_small_buf) {
   );
 }
 
-MODERNA_ADD_TEST(test_read_n) {
+JOWI_ADD_TEST(test_read_n) {
   auto f = io::make_byte_reader<2048>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_n(5)), "HELLO");
 }
 
-MODERNA_ADD_TEST(test_read_until) {
+JOWI_ADD_TEST(test_read_until) {
   auto f = io::make_byte_reader<2048>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -47,7 +47,7 @@ MODERNA_ADD_TEST(test_read_until) {
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_until('\n')), "HELLO WORLD 2");
 }
 
-MODERNA_ADD_TEST(test_read_until_small_buf) {
+JOWI_ADD_TEST(test_read_until_small_buf) {
   auto f = io::make_byte_reader<5>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -56,7 +56,7 @@ MODERNA_ADD_TEST(test_read_until_small_buf) {
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_until('\n')), "HELLO WORLD 2");
 }
 
-MODERNA_ADD_TEST(test_read_line) {
+JOWI_ADD_TEST(test_read_line) {
   auto f = io::make_line_reader<2048>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -66,7 +66,7 @@ MODERNA_ADD_TEST(test_read_line) {
   test_lib::assert_equal(lines[2], "HELLO WORLD 2");
 }
 
-MODERNA_ADD_TEST(test_read_line_small_buf) {
+JOWI_ADD_TEST(test_read_line_small_buf) {
   auto f = io::make_line_reader<5>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
@@ -76,7 +76,7 @@ MODERNA_ADD_TEST(test_read_line_small_buf) {
   test_lib::assert_equal(lines[2], "HELLO WORLD 2");
 }
 
-MODERNA_ADD_TEST(csv_reader_test) {
+JOWI_ADD_TEST(csv_reader_test) {
   auto f = io::make_csv_reader<2048>(
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_CSV_FILE))
   );
@@ -92,7 +92,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
   }
 }
 
-// MODERNA_ADD_TEST(read_test) {
+// JOWI_ADD_TEST(read_test) {
 //   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
 //   test_lib::assert_expected(open_res);
 //   auto file = std::move(open_res.value());
@@ -101,7 +101,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   test_lib::assert_equal(r_value.value(), "HELLO WORLD 0\nHELLO WORLD 1\nHELLO WORLD 2\n");
 // }
 
-// MODERNA_ADD_TEST(read_n_test) {
+// JOWI_ADD_TEST(read_n_test) {
 //   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
 //   test_lib::assert_expected(open_res);
 //   auto file = std::move(open_res.value());
@@ -110,7 +110,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   test_lib::assert_equal(r_value.value(), "HELLO WORLD");
 // }
 
-// MODERNA_ADD_TEST(read_seek_n_test) {
+// JOWI_ADD_TEST(read_seek_n_test) {
 //   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
 //   test_lib::assert_expected(open_res);
 //   auto file = std::move(open_res.value());
@@ -120,7 +120,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   test_lib::assert_equal(r_value.value(), "HELLO WORLD");
 // }
 
-// MODERNA_ADD_TEST(write_test) {
+// JOWI_ADD_TEST(write_test) {
 //   auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
 //   test_lib::assert_expected(open_res);
 //   auto file = std::move(open_res.value());
@@ -134,7 +134,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   test_lib::assert_expected(r_value);
 // }
 
-// MODERNA_ADD_TEST(write_seek_test) {
+// JOWI_ADD_TEST(write_seek_test) {
 //   auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
 //   test_lib::assert_expected(open_res);
 //   auto file = std::move(open_res.value());
@@ -154,17 +154,17 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   test_lib::assert_equal(r_value.value(), rd);
 // }
 
-// MODERNA_ADD_TEST(open_file_fail) {
+// JOWI_ADD_TEST(open_file_fail) {
 //   auto open_res = io::open_file<io::open_mode::read>("/non/existent/file");
 //   test_lib::assert_false(open_res.has_value(), "Non existent file should not be openable");
 // }
 
-// MODERNA_ADD_TEST(open_file_write_delete_file) {
+// JOWI_ADD_TEST(open_file_write_delete_file) {
 //   auto open_res = io::open_file<io::open_mode::write_truncate>("/tmp/lol");
 //   test_lib::assert_expected(open_res);
 // }
 
-// MODERNA_ADD_TEST(csv_reader_test) {
+// JOWI_ADD_TEST(csv_reader_test) {
 //   auto res = io::open_file<io::open_mode::read>{READ_CSV_FILE};
 //   test_lib::assert_expected(res);
 //   auto file = std::move(res.value());
@@ -182,7 +182,7 @@ MODERNA_ADD_TEST(csv_reader_test) {
 //   }
 // }
 
-// MODERNA_ADD_TEST(csv_writer_test) {
+// JOWI_ADD_TEST(csv_writer_test) {
 //   std::vector<std::vector<std::string>> write_content{
 //     {test_lib::random_string(11)},
 //     {test_lib::random_string(11), test_lib::random_string(11)},

@@ -1,8 +1,8 @@
 module;
 #include <concepts>
-export module moderna.io:file_descriptor;
+export module jowi.io:file_descriptor;
 
-namespace moderna::io {
+namespace jowi::io {
   /*
     file_handle
     is a non owning descriptor produced by calling borrow on a file_descriptor.

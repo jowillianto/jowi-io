@@ -5,13 +5,13 @@ module;
 #include <fcntl.h>
 #include <string_view>
 #include <unistd.h>
-export module moderna.io:sys_file;
-import moderna.generic;
+export module jowi.io:sys_file;
+import jowi.generic;
 import :error;
 import :sys_util;
 import :is_file;
 
-namespace moderna::io {
+namespace jowi::io {
   std::expected<off_t, io_error> sys_seek(int fd, seek_mode s, off_t offset) noexcept {
     int seek_bit = 0;
     switch (s) {

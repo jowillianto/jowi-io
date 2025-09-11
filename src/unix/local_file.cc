@@ -4,14 +4,14 @@ module;
 #include <expected>
 #include <filesystem>
 #include <unistd.h>
-export module moderna.io:local_file;
-import moderna.generic;
+export module jowi.io:local_file;
+import jowi.generic;
 import :fd_type;
 import :error;
 import :sys_file;
 import :is_file;
 
-namespace moderna::io {
+namespace jowi::io {
   namespace fs = std::filesystem;
 
   export struct local_file {

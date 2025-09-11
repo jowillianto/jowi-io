@@ -7,14 +7,14 @@ module;
 #include <string_view>
 #include <unistd.h>
 #include <utility>
-export module moderna.io:pipe;
-import moderna.generic;
+export module jowi.io:pipe;
+import jowi.generic;
 import :fd_type;
 import :error;
 import :sys_util;
 import :sys_file;
 
-namespace moderna::io {
+namespace jowi::io {
   export struct reader_pipe;
   export struct writer_pipe;
   export std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(

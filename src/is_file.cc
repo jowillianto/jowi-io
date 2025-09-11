@@ -2,12 +2,12 @@ module;
 #include <concepts>
 #include <expected>
 #include <string_view>
-export module moderna.io:is_file;
-import moderna.generic;
+export module jowi.io:is_file;
+import jowi.generic;
 import :error;
 import :file_descriptor;
 
-namespace moderna::io {
+namespace jowi::io {
   export enum struct seek_mode { START, CURRENT, END };
   export template <class file_type>
   concept is_writable = requires(file_type &file, std::string_view c) {

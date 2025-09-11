@@ -10,14 +10,14 @@ module;
 #include <concepts>
 #include <expected>
 #include <string_view>
-export module moderna.io:sys_net;
-import moderna.generic;
+export module jowi.io:sys_net;
+import jowi.generic;
 import :error;
 import :fd_type;
 import :sys_util;
 import :sys_file;
 
-namespace moderna::io {
+namespace jowi::io {
   export enum struct sock_protocol { TCP, UDP };
   std::array sock_protocol_to_sys{SOCK_STREAM, SOCK_DGRAM};
   export template <class net_address_type>

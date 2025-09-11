@@ -1,25 +1,25 @@
-#include <moderna/test_lib.hpp>
+#include <jowi/test_lib.hpp>
 #include <future>
 #include <thread>
-import moderna.test_lib;
-import moderna.io;
-import moderna.generic;
+import jowi.test_lib;
+import jowi.io;
+import jowi.generic;
 
-namespace test_lib = moderna::test_lib;
-namespace io = moderna::io;
-namespace generic = moderna::generic;
+namespace test_lib = jowi::test_lib;
+namespace io = jowi::io;
+namespace generic = jowi::generic;
 
 int get_random_port() {
   return test_lib::random_integer(20000, 70000);
 }
 
-MODERNA_SETUP(argc, argv) {
+JOWI_SETUP(argc, argv) {
   test_lib::get_test_context().set_thread_count(1).set_time_unit(
     test_lib::test_time_unit::MILLI_SECONDS
   );
 }
 
-MODERNA_ADD_TEST(test_create_listener) {
+JOWI_ADD_TEST(test_create_listener) {
   int port = get_random_port();
   auto addr = io::ipv4_address::empty().port(port).all_interface();
   auto sock =
@@ -28,7 +28,7 @@ MODERNA_ADD_TEST(test_create_listener) {
     }));
 }
 
-MODERNA_ADD_TEST(test_connect_to_listener) {
+JOWI_ADD_TEST(test_connect_to_listener) {
   int port = get_random_port();
   auto addr = io::ipv4_address::empty().port(port).all_interface();
   auto listener =
@@ -56,7 +56,7 @@ MODERNA_ADD_TEST(test_connect_to_listener) {
   fut.wait();
 }
 
-MODERNA_ADD_TEST(test_connect_and_check_no_data) {
+JOWI_ADD_TEST(test_connect_and_check_no_data) {
   int port = get_random_port();
   auto addr = io::ipv4_address::empty().port(port).all_interface();
   auto listener =
@@ -77,7 +77,7 @@ MODERNA_ADD_TEST(test_connect_and_check_no_data) {
   fut.wait();
 }
 
-MODERNA_ADD_TEST(test_connect_and_check_have_data) {
+JOWI_ADD_TEST(test_connect_and_check_have_data) {
   int port = get_random_port();
   auto addr = io::ipv4_address::empty().port(port).all_interface();
   auto listener =

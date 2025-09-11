@@ -2,9 +2,9 @@ module;
 #include <cstring>
 #include <exception>
 #include <format>
-export module moderna.io:error;
-import moderna.generic;
-namespace moderna::io {
+export module jowi.io:error;
+import jowi.generic;
+namespace jowi::io {
   export struct io_error : public std::exception {
   private:
     int __err_code;

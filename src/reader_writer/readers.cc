@@ -5,12 +5,12 @@ module;
 #include <iterator>
 #include <string>
 #include <string_view>
-export module moderna.io:readers;
-import moderna.generic;
+export module jowi.io:readers;
+import jowi.generic;
 import :is_file;
 import :error;
 
-namespace moderna::io {
+namespace jowi::io {
   export template <size_t buf_size, is_readable<buf_size> file_type> struct byte_reader {
   private:
     file_type __f;

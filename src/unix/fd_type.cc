@@ -1,9 +1,9 @@
 module;
 #include <unistd.h>
-export module moderna.io:fd_type;
+export module jowi.io:fd_type;
 import :file_descriptor;
 
-namespace moderna::io {
+namespace jowi::io {
   /*
     In this file, for Cross Platform Compatibility, the type of the file descriptor and file closer
     is expected to be declared over here.
