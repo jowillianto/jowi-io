@@ -137,6 +137,10 @@ namespace jowi::io {
     ) const noexcept {
       return sys_file_poller::read_poller().timeout(timeout)(__f.fd());
     }
+
+    file_handle<int> handle() const {
+      return __f.borrow();
+    }
   };
 
   export template <is_net_address addr_type> struct sock_free {
@@ -159,6 +163,10 @@ namespace jowi::io {
     }
     const addr_type &addr() const noexcept {
       return __addr;
+    }
+
+    file_handle<int> handle() const {
+      return __f.borrow();
     }
     std::expected<sock_free, io_error> bind() && noexcept {
       auto [addr, addr_size] = const_cast<const addr_type &>(__addr).sys_addr();

@@ -33,4 +33,20 @@ namespace jowi::io {
   concept is_sized = requires(file_type &file) {
     { file.size() } -> std::same_as<std::expected<size_t, io_error>>;
   };
+
+  export template <class file_type>
+  concept is_file = requires(file_type &file) {
+    { file.handle() } -> is_file_descriptor;
+  };
+
+  export template <class file_type> struct basic_file {
+  private:
+    io::file_handle<int> __f;
+
+  public:
+    basic_file(int fd) : __f{fd} {}
+    io::file_handle<int> handle() const {
+      return __f;
+    }
+  };
 }

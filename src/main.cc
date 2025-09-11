@@ -8,3 +8,5 @@ export import :readers;
 export import :pipe;
 export import :http;
 export import :error;
+export import :is_file;
+export import :file_descriptor;

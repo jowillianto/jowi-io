@@ -37,6 +37,10 @@ namespace jowi::io {
     ) const noexcept {
       return sys_file_poller::read_poller().timeout(timeout)(__f.fd());
     }
+
+    file_handle<int> handle() const {
+      return __f.borrow();
+    }
   };
   export struct writer_pipe {
   private:
@@ -52,6 +56,10 @@ namespace jowi::io {
       std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
     ) const noexcept {
       return sys_file_poller::write_poller().timeout(timeout)(__f.fd());
+    }
+
+    file_handle<int> handle() const {
+      return __f.borrow();
     }
   };
 

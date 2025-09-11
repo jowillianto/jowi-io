@@ -56,6 +56,9 @@ namespace jowi::io {
     std::expected<void, io_error> sync() noexcept {
       return sys_sync(__f.fd());
     }
+    file_handle<int> handle() const {
+      return __f.borrow();
+    }
   };
 
   export struct open_options {
