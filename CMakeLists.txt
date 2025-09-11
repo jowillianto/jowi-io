@@ -6,7 +6,7 @@ set (CMAKE_CXX_SCAN_FOR_MODULES true)
 
 option (JOWI_IO_BUILD_TESTS "Build tests" OFF)
 
-if (NOT jowi::generic)
+if (NOT TARGET jowi::generic)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/jowi-generic)
 endif()
 
