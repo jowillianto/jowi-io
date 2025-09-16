@@ -11,16 +11,16 @@ import :is_file;
 import :error;
 
 namespace jowi::io {
-  export template <size_t buf_size, is_readable<buf_size> file_type> struct byte_reader {
+  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct byte_reader {
   private:
     file_type __f;
     generic::fixed_string<buf_size> __buf;
     const char *__last_read;
 
-    std::expected<std::string_view, io_error> __buf_read_n(size_t n) noexcept {
+    std::expected<std::string_view, io_error> __buf_read_n(uint64_t n) noexcept {
       return read_buf().transform([&](auto &&) {
-        size_t unread_size = std::distance(__last_read, __buf.cend());
-        size_t n_to_read = std::min(n, unread_size);
+        uint64_t unread_size = std::distance(__last_read, __buf.cend());
+        uint64_t n_to_read = std::min(n, unread_size);
         const char *rbeg = __last_read;
         const char *rend = rbeg + n_to_read;
         __last_read = rend;
@@ -39,31 +39,41 @@ namespace jowi::io {
     }
 
     std::expected<void, io_error> __recursive_read_n(
-      size_t n, std::back_insert_iterator<std::string> &it
+      uint64_t n, std::back_insert_iterator<std::string> &it
     ) {
-      if (n == 0) {
-        return {};
-      }
-      return __buf_read_n(n).and_then([&](std::string_view v) {
-        std::ranges::copy(v, it);
-        if (v.length() == 0) {
-          return std::expected<void, io_error>{};
+      std::expected<void, io_error> res;
+      while (n != 0) {
+        auto buf = __buf_read_n(n);
+        if (!buf) {
+          res = std::unexpected{buf.error()};
+          break;
         }
-        return __recursive_read_n(n - v.length(), it);
-      });
+        std::ranges::copy(*buf, it);
+        if (buf->length() == 0) {
+          break;
+        }
+        n -= buf->length();
+      }
+      return res;
     }
 
     template <std::invocable<char> F> requires(std::same_as<std::invoke_result_t<F, char>, bool>)
     std::expected<void, io_error> __recursive_read_until(
       F &&f, std::back_insert_iterator<std::string> &it
     ) {
-      return __buf_read_until(std::forward<F>(f)).and_then([&](auto &&p) {
-        std::ranges::copy(p.first, it);
-        if (p.first.length() == 0 || p.second) {
-          return std::expected<void, io_error>{};
+      std::expected<void, io_error> res;
+      while (true) {
+        auto buf = __buf_read_until(std::forward<F>(f));
+        if (!buf) {
+          res = std::unexpected{buf.error()};
+          break;
         }
-        return __recursive_read_until(std::forward<F>(f), it);
-      });
+        std::ranges::copy(buf->first, it);
+        if (buf->first.length() == 0 || buf->second) {
+          break;
+        }
+      }
+      return res;
     }
 
   public:
@@ -88,7 +98,7 @@ namespace jowi::io {
     /*
       Read N in buffer.
     */
-    std::expected<std::string, io_error> read_n(size_t n) {
+    std::expected<std::string, io_error> read_n(uint64_t n) {
       std::string buf;
       auto it = std::back_inserter(buf);
       return __recursive_read_n(n, it).transform([&]() { return std::move(buf); });
@@ -116,25 +126,31 @@ namespace jowi::io {
     }
   };
 
-  export template <size_t buf_size, is_readable<buf_size> file_type>
+  export template <uint64_t buf_size, is_readable<buf_size> file_type>
   byte_reader<buf_size, file_type> make_byte_reader(file_type f) {
     return byte_reader<buf_size, file_type>{std::move(f)};
   }
 
-  export template <size_t buf_size, is_readable<buf_size> file_type> struct line_reader {
+  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct line_reader {
   private:
     byte_reader<buf_size, file_type> __reader;
 
     std::expected<void, io_error> __read_lines(
       std::back_insert_iterator<std::vector<std::string>> &it
     ) {
-      return read_line().and_then([&](std::string &&v) {
-        if (v.empty()) {
-          return std::expected<void, io_error>{};
+      std::expected<void, io_error> res;
+      while (true) {
+        auto line = read_line();
+        if (!line) {
+          res = std::unexpected{line.error()};
+          break;
         }
-        *it = std::move(v);
-        return __read_lines(it);
-      });
+        if (line->empty()) {
+          break;
+        }
+        it = *line;
+      }
+      return res;
     }
 
   public:
@@ -155,12 +171,12 @@ namespace jowi::io {
     }
   };
 
-  export template <size_t buf_size, is_readable<buf_size> file_type>
+  export template <uint64_t buf_size, is_readable<buf_size> file_type>
   line_reader<buf_size, file_type> make_line_reader(file_type f) {
     return line_reader<buf_size, file_type>{std::move(f)};
   }
 
-  export template <size_t buf_size, is_readable<buf_size> file_type> struct csv_reader {
+  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct csv_reader {
   private:
     byte_reader<buf_size, file_type> __reader;
     char __delim;
@@ -168,13 +184,18 @@ namespace jowi::io {
     std::expected<void, io_error> __read_rows(
       std::back_insert_iterator<std::vector<std::vector<std::string>>> &it
     ) {
-      return read_row().and_then([&](auto &&row) {
+      std::expected<void, io_error> res;
+      while (true) {
+        auto row = read_row();
         if (!row) {
-          return std::expected<void, io_error>{};
+          res = std::unexpected{row.error()};
         }
-        *it = std::move(row.value());
-        return __read_rows(it);
-      });
+        if (!(*row)) {
+          break;
+        }
+        it = std::move(**row);
+      }
+      return res;
     }
 
   public:
@@ -188,12 +209,12 @@ namespace jowi::io {
           if (line.empty()) {
             return std::nullopt;
           }
-          std::optional<size_t> quote_pos = std::nullopt;
-          size_t col_beg_id = 0;
-          for (size_t i = 0; i < line.length(); i += 1) {
+          std::optional<uint64_t> quote_pos = std::nullopt;
+          uint64_t col_beg_id = 0;
+          for (uint64_t i = 0; i < line.length(); i += 1) {
             char x = line[i];
             if (x == ',' && !quote_pos) {
-              *it = std::string{line.begin() + col_beg_id, line.begin() + i};
+              it = std::string{line.begin() + col_beg_id, line.begin() + i};
               col_beg_id = i + 1;
             } else if (x == '"' && !quote_pos) {
               quote_pos = i;
@@ -202,7 +223,7 @@ namespace jowi::io {
             }
           }
           if (col_beg_id != line.length()) {
-            *it = std::string{line.begin() + col_beg_id, line.end()};
+            it = std::string{line.begin() + col_beg_id, line.end()};
           }
           return std::move(cols);
         }
@@ -220,7 +241,7 @@ namespace jowi::io {
     }
   };
 
-  export template <size_t buf_size, is_readable<buf_size> file_type>
+  export template <uint64_t buf_size, is_readable<buf_size> file_type>
   csv_reader<buf_size, file_type> make_csv_reader(file_type f, char delim = ',') {
     return csv_reader<buf_size, file_type>{std::move(f), delim};
   }
