@@ -223,7 +223,7 @@ namespace jowi::io {
             }
           }
           if (col_beg_id != line.length()) {
-            it = std::string{line.begin() + col_beg_id, line.end()};
+            it = std::string{line.begin() + col_beg_id, line.begin() + line.length() - 1};
           }
           return std::move(cols);
         }
