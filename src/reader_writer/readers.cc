@@ -38,9 +38,7 @@ namespace jowi::io {
       });
     }
 
-    std::expected<void, io_error> __recursive_read_n(
-      uint64_t n, std::back_insert_iterator<std::string> &it
-    ) {
+    std::expected<void, io_error> __recursive_read_n(uint64_t n, std::string &it) {
       std::expected<void, io_error> res;
       while (n != 0) {
         auto buf = __buf_read_n(n);
@@ -48,7 +46,7 @@ namespace jowi::io {
           res = std::unexpected{buf.error()};
           break;
         }
-        std::ranges::copy(*buf, it);
+        it.append_range(*buf);
         if (buf->length() == 0) {
           break;
         }
@@ -58,9 +56,7 @@ namespace jowi::io {
     }
 
     template <std::invocable<char> F> requires(std::same_as<std::invoke_result_t<F, char>, bool>)
-    std::expected<void, io_error> __recursive_read_until(
-      F &&f, std::back_insert_iterator<std::string> &it
-    ) {
+    std::expected<void, io_error> __recursive_read_until(F &&f, std::string &it) {
       std::expected<void, io_error> res;
       while (true) {
         auto buf = __buf_read_until(std::forward<F>(f));
@@ -68,7 +64,7 @@ namespace jowi::io {
           res = std::unexpected{buf.error()};
           break;
         }
-        std::ranges::copy(buf->first, it);
+        it.append_range(buf->first);
         if (buf->first.length() == 0 || buf->second) {
           break;
         }
@@ -100,8 +96,8 @@ namespace jowi::io {
     */
     std::expected<std::string, io_error> read_n(uint64_t n) {
       std::string buf;
-      auto it = std::back_inserter(buf);
-      return __recursive_read_n(n, it).transform([&]() { return std::move(buf); });
+      // auto it = std::back_inserter(buf);
+      return __recursive_read_n(n, buf).transform([&]() { return std::move(buf); });
     }
 
     std::expected<std::string, io_error> read() {
@@ -111,8 +107,8 @@ namespace jowi::io {
     template <std::invocable<char> F> requires(std::same_as<std::invoke_result_t<F, char>, bool>)
     std::expected<std::string, io_error> read_until(F &&f) {
       std::string buf;
-      auto it = std::back_inserter(buf);
-      return __recursive_read_until(std::forward<F>(f), it).transform([&]() {
+      // auto it = std::back_inserter(buf);
+      return __recursive_read_until(std::forward<F>(f), buf).transform([&]() {
         return std::move(buf);
       });
     }
