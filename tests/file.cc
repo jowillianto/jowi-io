@@ -1,8 +1,8 @@
-import jowi.test_lib;
-import jowi.io;
 #include <jowi/test_lib.hpp>
 #include <algorithm>
-#include <utility>
+#include <string>
+import jowi.test_lib;
+import jowi.io;
 
 namespace test_lib = jowi::test_lib;
 namespace io = jowi::io;
@@ -14,7 +14,8 @@ JOWI_SETUP(argc, argv) {
 }
 
 JOWI_ADD_TEST(test_read) {
-  auto f = io::make_byte_reader<2048>(
+  auto f = io::byte_reader(
+    io::fixed_buffer<2048>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(
@@ -23,7 +24,8 @@ JOWI_ADD_TEST(test_read) {
 }
 
 JOWI_ADD_TEST(test_read_small_buf) {
-  auto f = io::make_byte_reader<5>(
+  auto f = io::byte_reader(
+    io::fixed_buffer<5>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(
@@ -32,14 +34,16 @@ JOWI_ADD_TEST(test_read_small_buf) {
 }
 
 JOWI_ADD_TEST(test_read_n) {
-  auto f = io::make_byte_reader<2048>(
+  auto f = io::byte_reader(
+    io::fixed_buffer<2048>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_n(5)), "HELLO");
 }
 
 JOWI_ADD_TEST(test_read_until) {
-  auto f = io::make_byte_reader<2048>(
+  auto f = io::byte_reader(
+    io::fixed_buffer<2048>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_until('\n')), "HELLO WORLD 0");
@@ -48,7 +52,8 @@ JOWI_ADD_TEST(test_read_until) {
 }
 
 JOWI_ADD_TEST(test_read_until_small_buf) {
-  auto f = io::make_byte_reader<5>(
+  auto f = io::byte_reader(
+    io::fixed_buffer<5>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   test_lib::assert_equal(test_lib::assert_expected_value(f.read_until('\n')), "HELLO WORLD 0");
@@ -57,7 +62,8 @@ JOWI_ADD_TEST(test_read_until_small_buf) {
 }
 
 JOWI_ADD_TEST(test_read_line) {
-  auto f = io::make_line_reader<2048>(
+  auto f = io::line_reader(
+    io::fixed_buffer<2048>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   auto lines = test_lib::assert_expected_value(f.read_lines());
@@ -67,7 +73,8 @@ JOWI_ADD_TEST(test_read_line) {
 }
 
 JOWI_ADD_TEST(test_read_line_small_buf) {
-  auto f = io::make_line_reader<5>(
+  auto f = io::line_reader(
+    io::fixed_buffer<5>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_FILE))
   );
   auto lines = test_lib::assert_expected_value(f.read_lines());
@@ -77,7 +84,8 @@ JOWI_ADD_TEST(test_read_line_small_buf) {
 }
 
 JOWI_ADD_TEST(csv_reader_test) {
-  auto f = io::make_csv_reader<2048>(
+  auto f = io::csv_reader(
+    io::fixed_buffer<2048>{},
     test_lib::assert_expected_value(io::open_options{}.read().open(READ_CSV_FILE))
   );
   auto rows = test_lib::assert_expected_value(f.read_rows());
@@ -91,128 +99,3 @@ JOWI_ADD_TEST(csv_reader_test) {
     }
   }
 }
-
-// JOWI_ADD_TEST(read_test) {
-//   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
-//   test_lib::assert_expected(open_res);
-//   auto file = std::move(open_res.value());
-//   auto r_value = file.read();
-//   test_lib::assert_expected(r_value);
-//   test_lib::assert_equal(r_value.value(), "HELLO WORLD 0\nHELLO WORLD 1\nHELLO WORLD 2\n");
-// }
-
-// JOWI_ADD_TEST(read_n_test) {
-//   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
-//   test_lib::assert_expected(open_res);
-//   auto file = std::move(open_res.value());
-//   auto r_value = file.read(11);
-//   test_lib::assert_expected(r_value);
-//   test_lib::assert_equal(r_value.value(), "HELLO WORLD");
-// }
-
-// JOWI_ADD_TEST(read_seek_n_test) {
-//   auto open_res = io::open_file<io::open_mode::read>(READ_FILE);
-//   test_lib::assert_expected(open_res);
-//   auto file = std::move(open_res.value());
-//   auto res = file.seek(14);
-//   auto r_value = file.read(11);
-//   test_lib::assert_expected(r_value);
-//   test_lib::assert_equal(r_value.value(), "HELLO WORLD");
-// }
-
-// JOWI_ADD_TEST(write_test) {
-//   auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
-//   test_lib::assert_expected(open_res);
-//   auto file = std::move(open_res.value());
-//   auto rd = test_lib::random_string(100);
-//   auto res = file.write(rd);
-//   test_lib::assert_expected(res);
-//   auto r_opener = io::open_file<io::open_mode::read>(WRITE_FILE);
-//   test_lib::assert_expected(r_opener);
-//   auto r_file = std::move(r_opener.value());
-//   auto r_value = r_file.read();
-//   test_lib::assert_expected(r_value);
-// }
-
-// JOWI_ADD_TEST(write_seek_test) {
-//   auto open_res = io::open_file<io::open_mode::write_truncate>(WRITE_FILE);
-//   test_lib::assert_expected(open_res);
-//   auto file = std::move(open_res.value());
-//   auto rd = test_lib::random_string(100);
-//   auto res = file.write(rd);
-//   test_lib::assert_expected(res);
-//   auto res_seek = file.seek(0);
-//   test_lib::assert_expected(res_seek);
-//   res = file.write("HELLO WORLD");
-//   test_lib::assert_expected(res);
-//   rd.replace(0, 11, "HELLO WORLD");
-//   auto r_opener = io::open_file<io::open_mode::read>(WRITE_FILE);
-//   test_lib::assert_expected(r_opener);
-//   auto r_file = std::move(r_opener.value());
-//   auto r_value = r_file.read();
-//   test_lib::assert_expected(r_value);
-//   test_lib::assert_equal(r_value.value(), rd);
-// }
-
-// JOWI_ADD_TEST(open_file_fail) {
-//   auto open_res = io::open_file<io::open_mode::read>("/non/existent/file");
-//   test_lib::assert_false(open_res.has_value(), "Non existent file should not be openable");
-// }
-
-// JOWI_ADD_TEST(open_file_write_delete_file) {
-//   auto open_res = io::open_file<io::open_mode::write_truncate>("/tmp/lol");
-//   test_lib::assert_expected(open_res);
-// }
-
-// JOWI_ADD_TEST(csv_reader_test) {
-//   auto res = io::open_file<io::open_mode::read>{READ_CSV_FILE};
-//   test_lib::assert_expected(res);
-//   auto file = std::move(res.value());
-//   auto lines_res = file.read(io::csv_reader{});
-//   test_lib::assert_expected(lines_res);
-//   auto lines = std::move(lines_res.value());
-//   test_lib::assert_equal(lines.size(), 10);
-//   for (size_t i = 0; i != lines.size(); i += 1) {
-//     test_lib::assert_equal(lines[i].size(), (i / 2) + 1);
-//     if (i % 2 == 0) {
-//       test_lib::assert_true(std::ranges::find(lines[i], "WORLD") == lines[i].end());
-//     } else {
-//       test_lib::assert_true(std::ranges::find(lines[i], "HELLO") == lines[i].end());
-//     }
-//   }
-// }
-
-// JOWI_ADD_TEST(csv_writer_test) {
-//   std::vector<std::vector<std::string>> write_content{
-//     {test_lib::random_string(11)},
-//     {test_lib::random_string(11), test_lib::random_string(11)},
-//     {test_lib::random_string(11), test_lib::random_string(11), test_lib::random_string(11)},
-//     {test_lib::random_string(11),
-//      test_lib::random_string(11),
-//      test_lib::random_string(11),
-//      test_lib::random_string(11)},
-//     {test_lib::random_string(11),
-//      test_lib::random_string(11),
-//      test_lib::random_string(11),
-//      test_lib::random_string(11),
-//      test_lib::random_string(11)}
-//   };
-//   auto res = io::open_file<io::open_mode::write_truncate>{WRITE_CSV_FILE};
-//   test_lib::assert_expected(res);
-//   auto file = std::move(res.value());
-//   auto w_res = file.write(write_content, io::csv_writer{});
-//   test_lib::assert_expected(w_res);
-
-//   auto r_f_res = io::open_file<io::open_mode::read>{WRITE_CSV_FILE};
-//   test_lib::assert_expected(r_f_res);
-//   auto r_file = std::move(r_f_res.value());
-//   auto r_res = r_file.read(io::csv_reader{});
-//   test_lib::assert_expected(r_res);
-//   auto r_cont = std::move(r_res.value());
-//   for (size_t i = 0; i < write_content.size(); i += 1) {
-//     for (size_t j = 0; j < write_content[i].size(); j += 1) {
-//       auto &entry = r_cont.at(i).at(j);
-//       test_lib::assert_equal(entry, write_content[i][j]);
-//     }
-//   }
-// }

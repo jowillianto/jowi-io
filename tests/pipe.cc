@@ -23,9 +23,9 @@ JOWI_ADD_TEST(test_pipe_simple_rw) {
   auto [r, w] = test_lib::assert_expected_value(io::open_pipe());
   auto msg = test_lib::random_string(100);
   test_lib::assert_expected(w.write(msg));
-  auto buf = generic::fixed_string<100>{};
+  auto buf = io::fixed_buffer<100>{};
   test_lib::assert_expected(r.read(buf));
-  test_lib::assert_equal(buf, msg);
+  test_lib::assert_equal(buf.read_buf(), msg);
 }
 
 JOWI_ADD_TEST(test_pipe_check_data_noexist) {

@@ -10,6 +10,7 @@ import :fd_type;
 import :error;
 import :sys_file;
 import :is_file;
+import :buffer;
 
 namespace jowi::io {
   namespace fs = std::filesystem;
@@ -25,7 +26,7 @@ namespace jowi::io {
     std::expected<size_t, io_error> write(std::string_view v) noexcept {
       return sys_write(__f.fd(), v);
     }
-    template <size_t N> std::expected<void, io_error> read(generic::fixed_string<N> &buf) noexcept {
+    std::expected<void, io_error> read(is_writable_buffer auto &buf) noexcept {
       return sys_read(__f.fd(), buf);
     }
     bool eof() const noexcept {

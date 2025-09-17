@@ -10,6 +10,7 @@ import jowi.generic;
 import :error;
 import :sys_util;
 import :is_file;
+import :buffer;
 
 namespace jowi::io {
   std::expected<off_t, io_error> sys_seek(int fd, seek_mode s, off_t offset) noexcept {
@@ -36,10 +37,9 @@ namespace jowi::io {
   std::expected<void, io_error> sys_sync(int fd) noexcept {
     return sys_call_void(fsync, fd);
   };
-  template <size_t N>
-  std::expected<void, io_error> sys_read(int fd, generic::fixed_string<N> &buf) noexcept {
-    return sys_call(read, fd, buf.begin(), N).transform([&](int read_size) {
-      buf.unsafe_set_length(read_size);
+  std::expected<void, io_error> sys_read(int fd, is_writable_buffer auto &buf) noexcept {
+    return sys_call(read, fd, buf.write_beg(), buf.writable_size()).transform([&](int read_size) {
+      buf.finish_write(read_size);
     });
   }
   struct sys_file_poller {

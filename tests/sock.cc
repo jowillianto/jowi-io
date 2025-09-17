@@ -3,11 +3,9 @@
 #include <thread>
 import jowi.test_lib;
 import jowi.io;
-import jowi.generic;
 
 namespace test_lib = jowi::test_lib;
 namespace io = jowi::io;
-namespace generic = jowi::generic;
 
 int get_random_port() {
   return test_lib::random_integer(20000, 70000);
@@ -50,9 +48,9 @@ JOWI_ADD_TEST(test_connect_to_listener) {
   auto connection = test_lib::assert_expected_value(
     io::sock_options{conn_addr}.create().and_then(&io::sock_free<io::ipv4_address>::connect)
   );
-  generic::fixed_string<100> recv_msg;
-  test_lib::assert_expected_value(connection.read<100>(recv_msg));
-  test_lib::assert_equal(recv_msg, msg);
+  io::fixed_buffer<100> recv_msg;
+  test_lib::assert_expected_value(connection.read(recv_msg));
+  test_lib::assert_equal(recv_msg.read_buf(), msg);
   fut.wait();
 }
 

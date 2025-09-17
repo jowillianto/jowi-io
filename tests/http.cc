@@ -159,7 +159,7 @@ JOWI_ADD_TEST(test_http_header_multiline) {
 }
 
 JOWI_ADD_TEST(test_http_config) {
-  auto reader = io::http::make_http_reader<2048>(in_mem_file{valid_http_header});
+  auto reader = io::http::byte_reader(io::fixed_buffer<2048>{}, in_mem_file{valid_http_header});
   auto config = test_lib::assert_expected_value(reader.read_config());
   test_lib::assert_equal(config.method, "GET");
   test_lib::assert_equal(config.path, "/api/users");

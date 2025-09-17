@@ -9,17 +9,18 @@ export module jowi.io:readers;
 import jowi.generic;
 import :is_file;
 import :error;
+import :buffer;
 
 namespace jowi::io {
-  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct byte_reader {
+  export template <is_rw_buffer buffer_type, is_readable file_type> struct byte_reader {
   private:
     file_type __f;
-    generic::fixed_string<buf_size> __buf;
+    buffer_type __buf;
     const char *__last_read;
 
     std::expected<std::string_view, io_error> __buf_read_n(uint64_t n) noexcept {
       return read_buf().transform([&](auto &&) {
-        uint64_t unread_size = std::distance(__last_read, __buf.cend());
+        uint64_t unread_size = std::distance(__last_read, __buf.read_end());
         uint64_t n_to_read = std::min(n, unread_size);
         const char *rbeg = __last_read;
         const char *rend = rbeg + n_to_read;
@@ -32,18 +33,18 @@ namespace jowi::io {
     std::expected<std::pair<std::string_view, bool>, io_error> __buf_read_until(F &&f) noexcept {
       return read_buf().transform([&](auto &&buf) {
         const char *rbeg = __last_read;
-        const char *rend = std::ranges::find_if(rbeg, __buf.cend(), std::forward<F>(f));
-        __last_read = std::min(rend + 1, __buf.cend());
-        return std::pair{std::string_view{rbeg, rend}, rend != __buf.cend()};
+        const char *rend = std::ranges::find_if(rbeg, __buf.read_end(), std::forward<F>(f));
+        __last_read = std::min(rend + 1, __buf.read_end());
+        return std::pair{std::string_view{rbeg, rend}, rend != __buf.read_end()};
       });
     }
 
     std::expected<std::pair<std::string_view, bool>, io_error> __buf_read_eq(char x) noexcept {
       return read_buf().transform([&](auto &&buf) {
         const char *rbeg = __last_read;
-        const char *rend = std::ranges::find(rbeg, __buf.cend(), x);
-        __last_read = std::min(rend + 1, __buf.cend());
-        return std::pair{std::string_view{rbeg, rend}, rend != __buf.cend()};
+        const char *rend = std::ranges::find(rbeg, __buf.read_end(), x);
+        __last_read = std::min(rend + 1, __buf.read_end());
+        return std::pair{std::string_view{rbeg, rend}, rend != __buf.read_end()};
       });
     }
 
@@ -98,22 +99,23 @@ namespace jowi::io {
     }
 
   public:
-    byte_reader(file_type f) noexcept : __f{std::move(f)}, __buf{}, __last_read{__buf.begin()} {}
+    byte_reader(buffer_type buf, file_type f) :
+      __f{std::move(f)}, __buf{std::move(buf)}, __last_read{__buf.read_beg()} {}
 
     /*
       Buffer Control
     */
     std::expected<std::string_view, io_error> read_buf() noexcept {
-      if (__last_read == __buf.end()) {
+      if (__last_read == __buf.read_end()) {
         return next_buf();
       }
-      return std::string_view{__last_read, __buf.end()};
+      return __buf.read_buf();
     }
     std::expected<std::string_view, io_error> next_buf() noexcept {
-      __buf.truncate();
+      __buf.reset();
       return __f.read(__buf).transform([&]() {
-        __last_read = __buf.begin();
-        return std::string_view{__buf};
+        __last_read = __buf.read_beg();
+        return __buf.read_buf();
       });
     }
     /*
@@ -147,15 +149,12 @@ namespace jowi::io {
     }
   };
 
-  export template <uint64_t buf_size, is_readable<buf_size> file_type>
-  byte_reader<buf_size, file_type> make_byte_reader(file_type f) {
-    return byte_reader<buf_size, file_type>{std::move(f)};
-  }
+  export template <is_rw_buffer buffer_type, is_readable file_type>
+  struct line_reader : private byte_reader<buffer_type, file_type> {
+  protected:
+    using byte_reader = byte_reader<buffer_type, file_type>;
 
-  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct line_reader {
   private:
-    byte_reader<buf_size, file_type> __reader;
-
     std::expected<void, io_error> __read_lines(
       std::back_insert_iterator<std::vector<std::string>> &it
     ) {
@@ -175,10 +174,10 @@ namespace jowi::io {
     }
 
   public:
-    line_reader(file_type f) noexcept : __reader{std::move(f)} {}
+    line_reader(buffer_type buf, file_type f) : byte_reader{std::move(buf), std::move(f)} {}
 
     std::expected<std::string, io_error> read_line() {
-      return __reader.read_until('\n');
+      return byte_reader::read_until('\n');
     }
 
     std::expected<std::vector<std::string>, io_error> read_lines() {
@@ -188,18 +187,16 @@ namespace jowi::io {
     }
 
     file_type release() && noexcept {
-      return __reader.release();
+      return byte_reader::release();
     }
   };
 
-  export template <uint64_t buf_size, is_readable<buf_size> file_type>
-  line_reader<buf_size, file_type> make_line_reader(file_type f) {
-    return line_reader<buf_size, file_type>{std::move(f)};
-  }
+  export template <is_rw_buffer buffer_type, is_readable file_type>
+  struct csv_reader : private byte_reader<buffer_type, file_type> {
+  protected:
+    using byte_reader = byte_reader<buffer_type, file_type>;
 
-  export template <uint64_t buf_size, is_readable<buf_size> file_type> struct csv_reader {
   private:
-    byte_reader<buf_size, file_type> __reader;
     char __delim;
 
     std::expected<void, io_error> __read_rows(
@@ -220,12 +217,13 @@ namespace jowi::io {
     }
 
   public:
-    csv_reader(file_type f, char delim) noexcept : __reader{std::move(f)}, __delim{delim} {}
+    csv_reader(buffer_type buf, file_type f, char delim = ',') :
+      byte_reader{std::move(buf), std::move(f)}, __delim{delim} {}
 
     std::expected<std::optional<std::vector<std::string>>, io_error> read_row() {
       std::vector<std::string> cols;
       auto it = std::back_inserter(cols);
-      return __reader.read_until('\n').transform(
+      return byte_reader::read_until('\n').transform(
         [&](std::string &&line) -> std::optional<std::vector<std::string>> {
           if (line.empty()) {
             return std::nullopt;
@@ -264,12 +262,7 @@ namespace jowi::io {
     }
 
     file_type release() && noexcept {
-      return __reader.release();
+      return byte_reader::release();
     }
   };
-
-  export template <uint64_t buf_size, is_readable<buf_size> file_type>
-  csv_reader<buf_size, file_type> make_csv_reader(file_type f, char delim = ',') {
-    return csv_reader<buf_size, file_type>{std::move(f), delim};
-  }
 }

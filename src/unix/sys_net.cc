@@ -119,8 +119,8 @@ namespace jowi::io {
       return __addr;
     }
 
-    template <size_t N> constexpr auto read(generic::fixed_string<N> &buf) noexcept {
-      return sys_read<N>(__f.fd(), buf);
+    std::expected<void, io_error> read(is_writable_buffer auto &buf) noexcept {
+      return sys_read(__f.fd(), buf);
     }
 
     constexpr auto write(std::string_view v) noexcept {

@@ -8,8 +8,8 @@ module;
 #include <string_view>
 #include <vector>
 export module jowi.io:http;
-import jowi.generic;
 import :readers;
+import :buffer;
 import :is_file;
 import :error;
 
@@ -213,12 +213,14 @@ namespace jowi::io::http {
     http_header headers;
   };
 
-  export template <size_t N, is_readable<N> file_type> struct http_reader {
-  private:
-    byte_reader<N, file_type> __reader;
+  export template <is_rw_buffer buffer_type, is_readable file_type>
+  struct http_reader : private byte_reader<buffer_type, file_type> {
+  protected:
+    using byte_reader = byte_reader<buffer_type, file_type>;
 
+  private:
     std::expected<void, http_error> __read_header(http_header &header) {
-      auto header_line = __reader.read_until('\n').transform_error(http_error::from_io_error);
+      auto header_line = byte_reader::read_until('\n').transform_error(http_error::from_io_error);
       if (!header_line) {
         return std::unexpected{header_line.error()};
       }
@@ -236,13 +238,13 @@ namespace jowi::io::http {
     }
 
   public:
-    http_reader(file_type f) : __reader{std::move(f)} {}
+    http_reader(buffer_type buf, file_type f) : byte_reader{std::move(buf), std::move(f)} {}
 
     std::expected<http_config, http_error> read_config() {
-      return __reader.read_until(' ')
+      return byte_reader::read_until(' ')
         .and_then([&](auto &&method) {
-          return __reader.read_until(' ').and_then([&](auto &&path) {
-            return __reader.read_until('\n').transform([&](auto &&) {
+          return byte_reader::read_until(' ').and_then([&](auto &&path) {
+            return byte_reader::read_until('\n').transform([&](auto &&) {
               return http_config{std::move(method), std::move(path), http_header{}};
             });
           });
@@ -253,11 +255,6 @@ namespace jowi::io::http {
         });
     }
   };
-
-  export template <size_t N, is_readable<N> file_type>
-  http_reader<N, file_type> make_http_reader(file_type f) {
-    return http_reader<N, file_type>{std::move(f)};
-  }
 };
 
 /*

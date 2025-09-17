@@ -28,7 +28,7 @@ namespace jowi::io {
     friend std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(bool) noexcept;
 
   public:
-    template <size_t N> std::expected<void, io_error> read(generic::fixed_string<N> &buf) noexcept {
+    std::expected<void, io_error> read(is_writable_buffer auto &buf) noexcept {
       return sys_read(__f.fd(), buf);
     }
 
