@@ -38,6 +38,15 @@ namespace jowi::io {
       });
     }
 
+    std::expected<std::pair<std::string_view, bool>, io_error> __buf_read_eq(char x) noexcept {
+      return read_buf().transform([&](auto &&buf) {
+        const char *rbeg = __last_read;
+        const char *rend = std::ranges::find(rbeg, __buf.cend(), x);
+        __last_read = std::min(rend + 1, __buf.cend());
+        return std::pair{std::string_view{rbeg, rend}, rend != __buf.cend()};
+      });
+    }
+
     std::expected<void, io_error> __recursive_read_n(uint64_t n, std::string &it) {
       std::expected<void, io_error> res;
       while (n != 0) {
@@ -60,6 +69,22 @@ namespace jowi::io {
       std::expected<void, io_error> res;
       while (true) {
         auto buf = __buf_read_until(std::forward<F>(f));
+        if (!buf) {
+          res = std::unexpected{buf.error()};
+          break;
+        }
+        it.append_range(buf->first);
+        if (buf->first.length() == 0 || buf->second) {
+          break;
+        }
+      }
+      return res;
+    }
+
+    std::expected<void, io_error> __recursive_read_eq(char x, std::string &it) {
+      std::expected<void, io_error> res;
+      while (true) {
+        auto buf = __buf_read_eq(x);
         if (!buf) {
           res = std::unexpected{buf.error()};
           break;
@@ -107,14 +132,14 @@ namespace jowi::io {
     template <std::invocable<char> F> requires(std::same_as<std::invoke_result_t<F, char>, bool>)
     std::expected<std::string, io_error> read_until(F &&f) {
       std::string buf;
-      // auto it = std::back_inserter(buf);
       return __recursive_read_until(std::forward<F>(f), buf).transform([&]() {
         return std::move(buf);
       });
     }
 
     std::expected<std::string, io_error> read_until(char r) {
-      return read_until([r](char l) { return l == r; });
+      std::string buf;
+      return __recursive_read_eq(r, buf).transform([&]() { return std::move(buf); });
     }
 
     file_type release() && noexcept {
