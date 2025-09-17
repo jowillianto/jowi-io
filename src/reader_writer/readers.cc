@@ -205,17 +205,23 @@ namespace jowi::io {
           if (line.empty()) {
             return std::nullopt;
           }
-          std::optional<uint64_t> quote_pos = std::nullopt;
+          std::optional<uint64_t> quote_beg;
+          std::optional<uint64_t> quote_end;
           uint64_t col_beg_id = 0;
           for (uint64_t i = 0; i < line.length(); i += 1) {
             char x = line[i];
-            if (x == ',' && !quote_pos) {
-              it = std::string{line.begin() + col_beg_id, line.begin() + i};
+            if (x == ',' && ((quote_beg && quote_end) || !(quote_beg || quote_end))) {
+              uint64_t col_beg = quote_beg.value_or(col_beg_id);
+              uint64_t col_end = quote_end.value_or(i);
+              it = std::string{line.begin() + col_beg, line.begin() + col_end};
+              quote_beg.reset();
+              quote_end.reset();
               col_beg_id = i + 1;
-            } else if (x == '"' && !quote_pos) {
-              quote_pos = i;
-            } else if (x == '"' && quote_pos) {
-              quote_pos = std::nullopt;
+            } else if (x == '"' && ((quote_beg && quote_end) || !(quote_beg || quote_end))) {
+              quote_beg = i + 1;
+              quote_end.reset();
+            } else if (x == '"' && (quote_beg && !quote_end)) {
+              quote_end = i;
             }
           }
           if (col_beg_id != line.length()) {
