@@ -42,12 +42,16 @@ namespace jowi::io {
 
   export template <class file_type> struct basic_file {
   private:
-    io::file_handle<int> __f;
+    io::file_handle<file_type> __f;
 
   public:
-    basic_file(int fd) : __f{fd} {}
-    io::file_handle<int> handle() const {
+    basic_file(file_type fd) : __f{fd} {}
+    io::file_handle<file_type> handle() const {
       return __f;
+    }
+
+    static basic_file invalid_file() {
+      return basic_file{-1};
     }
   };
 }
