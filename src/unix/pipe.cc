@@ -14,6 +14,11 @@ import :error;
 import :sys_util;
 import :sys_file;
 
+/**
+ * @file unix/pipe.cc
+ * @brief Pipe abstractions that present reader and writer endpoints with polling helpers.
+ */
+
 namespace jowi::io {
   export struct reader_pipe;
   export struct writer_pipe;
@@ -28,16 +33,30 @@ namespace jowi::io {
     friend std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(bool) noexcept;
 
   public:
+    /**
+     * @brief Reads bytes from the pipe into the provided buffer.
+     * @param buf Writable buffer receiving bytes.
+     * @return Success or IO error.
+     */
     std::expected<void, io_error> read(is_writable_buffer auto &buf) noexcept {
       return sys_read(__f.fd(), buf);
     }
 
+    /**
+     * @brief Checks if the pipe has data available within the timeout window.
+     * @param timeout Duration to wait before timing out.
+     * @return True when readable, false on timeout, or IO error.
+     */
     std::expected<bool, io_error> is_readable(
       std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
     ) const noexcept {
       return sys_file_poller::read_poller().timeout(timeout)(__f.fd());
     }
 
+    /**
+     * @brief Returns a borrowed handle for the underlying descriptor.
+     * @return Non-owning file handle.
+     */
     file_handle<int> handle() const {
       return __f.borrow();
     }
@@ -49,20 +68,39 @@ namespace jowi::io {
     friend std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(bool) noexcept;
 
   public:
+    /**
+     * @brief Writes bytes to the pipe.
+     * @param v View describing the bytes to send.
+     * @return Number of bytes written or IO error.
+     */
     std::expected<size_t, io_error> write(std::string_view v) noexcept {
       return sys_write(__f.fd(), v);
     }
+    /**
+     * @brief Checks if the pipe can accept data within the timeout window.
+     * @param timeout Duration to wait before timing out.
+     * @return True when writable, false on timeout, or IO error.
+     */
     std::expected<bool, io_error> is_writable(
       std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
     ) const noexcept {
       return sys_file_poller::write_poller().timeout(timeout)(__f.fd());
     }
 
+    /**
+     * @brief Returns a borrowed handle for the underlying descriptor.
+     * @return Non-owning file handle.
+     */
     file_handle<int> handle() const {
       return __f.borrow();
     }
   };
 
+  /**
+   * @brief Creates a reader and writer pipe pair.
+   * @param non_blocking When true, applies non-blocking and close-on-exec flags.
+   * @return Pair of pipe endpoints or IO error.
+   */
   export std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(
     bool non_blocking
   ) noexcept {

@@ -4,26 +4,29 @@ export module jowi.io:fd_type;
 import :file_descriptor;
 
 namespace jowi::io {
-  /*
-    In this file, for Cross Platform Compatibility, the type of the file descriptor and file closer
-    is expected to be declared over here.
-  */
+  /**
+   * @brief Defines platform-specific file descriptor helpers.
+   */
 
-  /*
-    DEFINITION BEGIN
-  */
-  /*
-    Declares the file closer
-  */
+  /**
+   * @brief Functor responsible for closing native file descriptors.
+   */
   export struct file_closer {
+    /**
+     * @brief Invokes `close` on the supplied descriptor.
+     * @param fd Native file descriptor to close.
+     */
     void operator()(int fd) const noexcept {
       close(fd);
     }
   };
 
-  /*
-    Declares the native file descriptor type
-  */
+  /**
+   * @brief Owning file descriptor type for POSIX systems.
+   */
   export using file_type = file_descriptor<int, file_closer>;
+  /**
+   * @brief Non-owning view over a native file descriptor.
+   */
   export using file_handle_type = file_handle<int>;
 }

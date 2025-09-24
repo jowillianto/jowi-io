@@ -1,3 +1,7 @@
+/**
+ * @file main.cc
+ * @brief Umbrella module that re-exports the IO library submodules for convenient inclusion.
+ */
 export module jowi.io;
 export import :sys_net;
 export import :sys_util;

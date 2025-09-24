@@ -11,7 +11,17 @@ import :is_file;
 import :error;
 import :buffer;
 
+/**
+ * @file reader_writer/readers.cc
+ * @brief Generic buffered readers supporting bytes, lines, and CSV rows.
+ */
+
 namespace jowi::io {
+  /**
+   * @brief Buffered reader providing byte-wise access primitives.
+   * @tparam buffer_type Buffer used to stage IO operations.
+   * @tparam file_type Readable file-like type satisfying `is_readable`.
+   */
   export template <is_rw_buffer buffer_type, is_readable file_type> struct byte_reader {
   private:
     file_type __f;
@@ -102,15 +112,20 @@ namespace jowi::io {
     byte_reader(buffer_type buf, file_type f) :
       __f{std::move(f)}, __buf{std::move(buf)}, __last_read{__buf.read_beg()} {}
 
-    /*
-      Buffer Control
-    */
+    /**
+     * @brief Returns the current readable view, refilling when exhausted.
+     * @return Read-only view over buffered bytes or IO error.
+     */
     std::expected<std::string_view, io_error> read_buf() noexcept {
       if (__last_read == __buf.read_end()) {
         return next_buf();
       }
       return __buf.read_buf();
     }
+    /**
+     * @brief Refills the buffer from the underlying file.
+     * @return Read-only view over the refreshed buffer or IO error.
+     */
     std::expected<std::string_view, io_error> next_buf() noexcept {
       __buf.reset();
       return __f.read(__buf).transform([&]() {
@@ -118,20 +133,32 @@ namespace jowi::io {
         return __buf.read_buf();
       });
     }
-    /*
-      Read N in buffer.
-    */
+    /**
+     * @brief Reads a fixed number of bytes from the stream.
+     * @param n Number of bytes to read, or `std::numeric_limits<uint64_t>::max()` for all data.
+     * @return String containing the requested bytes or IO error.
+     */
     std::expected<std::string, io_error> read_n(uint64_t n) {
       std::string buf;
       // auto it = std::back_inserter(buf);
       return __recursive_read_n(n, buf).transform([&]() { return std::move(buf); });
     }
 
+    /**
+     * @brief Reads the entire stream.
+     * @return Accumulated bytes or IO error.
+     */
     std::expected<std::string, io_error> read() {
       return read_n(-1);
     }
 
     template <std::invocable<char> F> requires(std::same_as<std::invoke_result_t<F, char>, bool>)
+    /**
+     * @brief Reads bytes until the predicate returns true.
+     * @tparam F Predicate type returning `bool` for a supplied character.
+     * @param f Predicate invoked for each character.
+     * @return Accumulated bytes (excluding delimiter) or IO error.
+     */
     std::expected<std::string, io_error> read_until(F &&f) {
       std::string buf;
       return __recursive_read_until(std::forward<F>(f), buf).transform([&]() {
@@ -139,22 +166,41 @@ namespace jowi::io {
       });
     }
 
+    /**
+     * @brief Reads bytes until the delimiter character is encountered.
+     * @param r Delimiter character.
+     * @return Accumulated bytes (excluding delimiter) or IO error.
+     */
     std::expected<std::string, io_error> read_until(char r) {
       std::string buf;
       return __recursive_read_eq(r, buf).transform([&]() { return std::move(buf); });
     }
 
+    /**
+     * @brief Releases the underlying file object.
+     * @return File instance previously owned by the reader.
+     */
     file_type release() && noexcept {
       return std::move(__f);
     }
   };
 
   export template <is_rw_buffer buffer_type, is_readable file_type>
+  /**
+   * @brief Reader specializing in line-oriented extraction.
+   * @tparam buffer_type Buffer type satisfying `is_rw_buffer`.
+   * @tparam file_type Readable file abstraction.
+   */
   struct line_reader : private byte_reader<buffer_type, file_type> {
   protected:
     using byte_reader = byte_reader<buffer_type, file_type>;
 
   private:
+    /**
+     * @brief Repeatedly reads lines into the supplied container.
+     * @param it Back inserter receiving new lines.
+     * @return Success or IO error from the underlying reader.
+     */
     std::expected<void, io_error> __read_lines(
       std::back_insert_iterator<std::vector<std::string>> &it
     ) {
@@ -174,24 +220,46 @@ namespace jowi::io {
     }
 
   public:
+    /**
+     * @brief Constructs a line reader.
+     * @param buf Buffer used for staged IO.
+     * @param f Readable file or socket.
+     */
     line_reader(buffer_type buf, file_type f) : byte_reader{std::move(buf), std::move(f)} {}
 
+    /**
+     * @brief Reads a single line terminated by `\n`.
+     * @return Line contents including the newline or IO error.
+     */
     std::expected<std::string, io_error> read_line() {
       return byte_reader::read_until('\n');
     }
 
+    /**
+     * @brief Reads successive non-empty lines until an empty line is encountered.
+     * @return Collection of lines or IO error.
+     */
     std::expected<std::vector<std::string>, io_error> read_lines() {
       std::vector<std::string> lines;
       auto it = std::back_inserter(lines);
       return __read_lines(it).transform([&]() { return std::move(lines); });
     }
 
+    /**
+     * @brief Releases the underlying file object.
+     * @return File instance previously owned by the reader.
+     */
     file_type release() && noexcept {
       return byte_reader::release();
     }
   };
 
   export template <is_rw_buffer buffer_type, is_readable file_type>
+  /**
+   * @brief Reader that produces CSV rows split on a configurable delimiter.
+   * @tparam buffer_type Buffer type satisfying `is_rw_buffer`.
+   * @tparam file_type Readable file abstraction.
+   */
   struct csv_reader : private byte_reader<buffer_type, file_type> {
   protected:
     using byte_reader = byte_reader<buffer_type, file_type>;
@@ -199,6 +267,11 @@ namespace jowi::io {
   private:
     char __delim;
 
+    /**
+     * @brief Reads CSV rows into the supplied container until an empty row is encountered.
+     * @param it Back inserter receiving parsed rows.
+     * @return Success or IO error from the underlying reader.
+     */
     std::expected<void, io_error> __read_rows(
       std::back_insert_iterator<std::vector<std::vector<std::string>>> &it
     ) {
@@ -217,9 +290,19 @@ namespace jowi::io {
     }
 
   public:
+    /**
+     * @brief Constructs a CSV reader.
+     * @param buf Buffer used for staged IO.
+     * @param f Readable file or socket.
+     * @param delim Column delimiter (defaults to comma).
+     */
     csv_reader(buffer_type buf, file_type f, char delim = ',') :
       byte_reader{std::move(buf), std::move(f)}, __delim{delim} {}
 
+    /**
+     * @brief Reads a single CSV row.
+     * @return Optional row (nullopt when encountering an empty line) or IO error.
+     */
     std::expected<std::optional<std::vector<std::string>>, io_error> read_row() {
       std::vector<std::string> cols;
       auto it = std::back_inserter(cols);
@@ -246,21 +329,29 @@ namespace jowi::io {
             } else if (x == '"' && (quote_beg && !quote_end)) {
               quote_end = i;
             }
-          }
-          if (col_beg_id != line.length()) {
-            it = std::string{line.begin() + col_beg_id, line.begin() + line.length() - 1};
-          }
-          return std::move(cols);
         }
+        if (col_beg_id != line.length()) {
+          it = std::string{line.begin() + col_beg_id, line.begin() + line.length() - 1};
+        }
+        return std::move(cols);
+      }
       );
     }
 
+    /**
+     * @brief Reads all available CSV rows.
+     * @return Collection of parsed rows or IO error.
+     */
     std::expected<std::vector<std::vector<std::string>>, io_error> read_rows() {
       std::vector<std::vector<std::string>> cols;
       auto it = std::back_inserter(cols);
       return __read_rows(it).transform([&]() { return std::move(cols); });
     }
 
+    /**
+     * @brief Releases the underlying file object.
+     * @return File instance previously owned by the reader.
+     */
     file_type release() && noexcept {
       return byte_reader::release();
     }
