@@ -1,11 +1,15 @@
 #include <jowi/test_lib.hpp>
+#include <filesystem>
 #include <future>
+#include <string>
 #include <thread>
 import jowi.test_lib;
 import jowi.io;
+import jowi.generic;
 
 namespace test_lib = jowi::test_lib;
 namespace io = jowi::io;
+namespace generic = jowi::generic;
 
 int get_random_port() {
   return test_lib::random_integer(20000, 70000);
@@ -46,7 +50,7 @@ JOWI_ADD_TEST(test_connect_to_listener) {
   auto conn_addr = io::ipv4_address::empty().port(port);
   test_lib::assert_expected(conn_addr.addr("127.0.0.1"));
   auto connection = test_lib::assert_expected_value(
-    io::sock_options{conn_addr}.create().and_then(&io::sock_free<io::ipv4_address>::connect)
+    io::sock_options{conn_addr}.create().and_then(&io::ipv4_sock_free::connect)
   );
   io::fixed_buffer<100> recv_msg;
   test_lib::assert_expected_value(connection.read(recv_msg));
@@ -69,7 +73,7 @@ JOWI_ADD_TEST(test_connect_and_check_no_data) {
   auto conn_addr = io::ipv4_address::empty().port(port);
   test_lib::assert_expected(conn_addr.addr("127.0.0.1"));
   auto connection = test_lib::assert_expected_value(
-    io::sock_options{conn_addr}.create().and_then(&io::sock_free<io::ipv4_address>::connect)
+    io::sock_options{conn_addr}.create().and_then(&io::ipv4_sock_free::connect)
   );
   test_lib::assert_false(test_lib::assert_expected_value(connection.is_readable()));
   fut.wait();
@@ -95,7 +99,7 @@ JOWI_ADD_TEST(test_connect_and_check_have_data) {
   auto conn_addr = io::ipv4_address::empty().port(port);
   test_lib::assert_expected(conn_addr.addr("127.0.0.1"));
   auto connection = test_lib::assert_expected_value(
-    io::sock_options{conn_addr}.create().and_then(&io::sock_free<io::ipv4_address>::connect)
+    io::sock_options{conn_addr}.create().and_then(&io::ipv4_sock_free::connect)
   );
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
   test_lib::assert_true(test_lib::assert_expected_value(connection.is_readable()));

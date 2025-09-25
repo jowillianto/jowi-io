@@ -258,12 +258,22 @@ namespace jowi::io {
    * @brief Socket wrapper managing lifetime prior to establishing a connection.
    * @tparam addr_type Network address type satisfying `is_net_address`.
    */
-  export template <is_net_address addr_type> struct sock_free {
+  export enum struct sock_state { FREE, BIND, LISTEN };
+  export template <is_net_address addr_type, sock_state state> struct sock_free {
   private:
     file_type __f;
     addr_type __addr;
     sock_protocol __protocol;
     bool __non_blocking;
+
+    friend struct sock_free<addr_type, sock_state::FREE>;
+    friend struct sock_free<addr_type, sock_state::BIND>;
+    friend struct sock_free<addr_type, sock_state::LISTEN>;
+
+    template <sock_state o_state>
+    sock_free(sock_free<addr_type, o_state> &&s) :
+      __f{std::move(s.__f)}, __addr{s.__addr}, __protocol{s.__protocol},
+      __non_blocking{s.__non_blocking} {}
 
   public:
     /**
@@ -302,10 +312,12 @@ namespace jowi::io {
      * @brief Binds the socket to its configured address.
      * @return Bound socket wrapper or IO error.
      */
-    std::expected<sock_free, io_error> bind() && noexcept {
+    std::expected<sock_free<addr_type, sock_state::BIND>, io_error> bind() && noexcept
+      requires(state == sock_state::FREE)
+    {
       auto [addr, addr_size] = const_cast<const addr_type &>(__addr).sys_addr();
       return sys_call_void(::bind, __f.fd(), addr, addr_size).transform([&]() {
-        return std::move(*this);
+        return sock_free<addr_type, sock_state::BIND>(std::move(*this));
       });
     }
     /**
@@ -313,9 +325,12 @@ namespace jowi::io {
      * @param backlog Maximum number of pending connections.
      * @return Socket wrapper ready to accept connections or IO error.
      */
-    std::expected<sock_free, io_error> listen(int backlog) && noexcept {
+    std::expected<sock_free<addr_type, sock_state::LISTEN>, io_error> listen(
+      int backlog
+    ) && noexcept requires(state == sock_state::BIND)
+    {
       return sys_call_void(::listen, __f.fd(), backlog).transform([&]() {
-        return std::move(*this);
+        return sock_free<addr_type, sock_state::LISTEN>{std::move(*this)};
       });
     }
     /**
@@ -323,7 +338,10 @@ namespace jowi::io {
      * @param backlog Maximum number of pending connections.
      * @return Socket wrapper ready to accept connections or IO error.
      */
-    std::expected<sock_free, io_error> bind_listen(int backlog) && noexcept {
+    std::expected<sock_free<addr_type, sock_state::LISTEN>, io_error> bind_listen(
+      int backlog
+    ) && noexcept requires(state == sock_state::FREE)
+    {
       return std::move(*this).bind().and_then([&](auto &&sock) {
         return std::move(sock).listen(backlog);
       });
@@ -332,7 +350,9 @@ namespace jowi::io {
      * @brief Connects the socket to its configured address.
      * @return Read/write socket wrapper or IO error.
      */
-    std::expected<sock_rw<addr_type>, io_error> connect() && noexcept {
+    std::expected<sock_rw<addr_type>, io_error> connect() && noexcept
+      requires(state == sock_state::FREE)
+    {
       auto [addr, addr_size] = const_cast<const addr_type &>(__addr).sys_addr();
       return sys_call_void(::connect, __f.fd(), addr, addr_size).transform([&]() {
         return sock_rw{std::move(__f), __addr, __protocol};
@@ -342,7 +362,9 @@ namespace jowi::io {
      * @brief Accepts an incoming connection.
      * @return Read/write socket representing the accepted connection or IO error.
      */
-    std::expected<sock_rw<addr_type>, io_error> accept() noexcept {
+    std::expected<sock_rw<addr_type>, io_error> accept() noexcept
+      requires(state == sock_state::LISTEN)
+    {
       auto recv_addr = addr_type::empty();
       auto [addr, addr_size] = recv_addr.sys_addr();
       return sys_call(::accept, __f.fd(), addr, &addr_size).transform([&](auto fd) {
@@ -401,237 +423,35 @@ namespace jowi::io {
      * @brief Creates a socket using the configured address and protocol.
      * @return Movable socket wrapper or IO error.
      */
-    std::expected<sock_free<addr_type>, io_error> create() const noexcept {
+    std::expected<sock_free<addr_type, sock_state::FREE>, io_error> create() const noexcept {
       return sys_call(
                socket, __addr.sys_domain(), sock_protocol_to_sys[static_cast<int>(__protocol)], 0
       )
-        .transform([&](int fd) { return sock_free{fd, __addr, __protocol}; });
+        .transform([&](int fd) {
+          return sock_free<addr_type, sock_state::FREE>{fd, __addr, __protocol};
+        });
     }
   };
-  // export struct ipv4_addr {
-  //   int port;
-  //   generic::static_string<15> addr;
 
-  //   std::expected<struct sockaddr_in, io_error> sys_addr() const noexcept {
-  //     struct sockaddr_in s_addr;
-  //     s_addr.sin_family = AF_INET;
-  //     s_addr.sin_port = port;
-  //     s_addr.sin_addr.s_addr = addr;
-  //     return s_addr;
-  //   }
-  // };
+  template struct sock_options<ipv4_address>;
+  template struct sock_options<local_address>;
+  template struct sock_rw<ipv4_address>;
+  template struct sock_rw<local_address>;
+  template struct sock_free<ipv4_address, sock_state::FREE>;
+  template struct sock_free<ipv4_address, sock_state::BIND>;
+  template struct sock_free<ipv4_address, sock_state::LISTEN>;
+  template struct sock_free<local_address, sock_state::FREE>;
+  template struct sock_free<local_address, sock_state::BIND>;
+  template struct sock_free<local_address, sock_state::LISTEN>;
 
-  // export struct ipv6_addr {
-  //   int port;
-  //   uint32_t flow_info;
-  //   std::array<char, 16> addr;
-
-  //   struct sockaddr_in6 sys_addr() const noexcept {
-  //     struct sockaddr_in6 s_addr;
-  //     s_addr.sin6_family = AF_INET6;
-  //     s_addr.sin6_port = port;
-  //     s_addr.sin6_flowinfo = flow_info;
-  //   }
-  // };
-
-  // export struct local_addr {
-  //   generic::static_string<107> addr;
-
-  //   struct sockaddr_un sys_addr() const noexcept {
-  //     struct sockaddr_un s_addr;
-  //     s_addr.sun_family = AF_UNIX;
-  //     std::ranges::copy_n(addr, 108, s_addr.sun_path);
-  //   }
-  // };
-
-  // export enum struct net_addr_family { IPV4 = 0 };
-  // constexpr static std::array addr_family_to_sys = {AF_INET};
-
-  // export enum struct net_protocol { TCP = 0, UDP };
-  // constexpr static std::array protocol_to_sys = {SOCK_STREAM, SOCK_DGRAM};
-
-  // export struct sock_rw {
-  // private:
-  //   file_type __f;
-  //   net_addr_family __dom;
-  //   net_protocol __protocol;
-  //   int __port;
-
-  // public:
-  //   sock_rw(file_type f, net_addr_family dom, net_protocol protocol, int port) noexcept :
-  //     __f{std::move(f)}, __dom{dom}, __protocol{protocol}, __port{port} {}
-
-  //   auto write(std::string_view v) noexcept {
-  //     return sys_write(__f.fd(), v);
-  //   }
-
-  //   template <size_t N> std::expected<generic::static_string<N>, io_error> read_n() noexcept {
-  //     return sys_read<N>{}();
-  //   }
-
-  //   std::expected<bool, io_error> is_readable(
-  //     std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
-  //   ) noexcept {
-  //     return sys_file_poller::read_poller(timeout)(__f.fd());
-  //   }
-
-  //   std::expected<bool, io_error> is_writable(
-  //     std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
-  //   ) noexcept {
-  //     return sys_file_poller::write_poller(timeout)(__f.fd());
-  //   }
-
-  //   int port() const noexcept {
-  //     return __port;
-  //   }
-  //   net_protocol protocol() const noexcept {
-  //     return __protocol;
-  //   }
-  //   net_addr_family domain() const noexcept {
-  //     return __dom;
-  //   }
-  // };
-
-  // export struct sock_listener {
-  // private:
-  //   file_type __f;
-  //   net_addr_family __dom;
-  //   net_protocol __protocol;
-  //   int __port;
-  //   int __backlog;
-
-  // public:
-  //   sock_listener(
-  //     file_type f, net_addr_family dom, net_protocol protocol, int port, int backlog
-  //   ) noexcept :
-  //     __f{std::move(f)}, __dom{std::move(dom)}, __protocol{std::move(protocol)}, __port{port},
-  //     __backlog{backlog} {}
-  //   int port() const noexcept {
-  //     return __port;
-  //   }
-  //   int backlog() const noexcept {
-  //     return __backlog;
-  //   }
-  //   net_protocol protocol() const noexcept {
-  //     return __protocol;
-  //   }
-  //   net_addr_family domain() const noexcept {
-  //     return __dom;
-  //   }
-  //   std::expected<sock_rw, io_error> accept() noexcept {
-  //     struct sockaddr_in addr;
-  //     socklen_t addr_len = sizeof(addr);
-  //     return sys_call(::accept, __f.fd(), reinterpret_cast<struct sockaddr *>(&addr), &addr_len)
-  //       .transform([&](int fd) { return file_type{fd}; })
-  //       .and_then([&](auto &&f) {
-  //         return sys_fcntl_or_flag{O_CLOEXEC | O_NONBLOCK}(f.fd()).transform([&]() {
-  //           return sock_rw{std::move(f), __dom, __protocol, addr.sin_port};
-  //         });
-  //       });
-  //   }
-  // };
-
-  // export struct sock {
-  // private:
-  //   file_type __f;
-  //   net_addr_family __dom;
-  //   net_protocol __protocol;
-
-  //   struct sockaddr_in __base_addr(int port) const noexcept {
-  //     struct sockaddr_storage addr;
-  //     addr.ss_family = addr_family_to_sys[static_cast<int>(__dom)];
-  //     addr.= port;
-  //     return addr;
-  //   }
-
-  //   struct sockaddr_in __addr(int port) const noexcept {
-  //     auto addr = __base_addr(port);
-  //     addr.sin_addr.s_addr = INADDR_ANY;
-  //     return addr;
-  //   }
-
-  //   std::expected<struct sockaddr_in, io_error> __addr(
-  //     std::string_view ip, int port
-  //   ) const noexcept {
-  //     auto addr = __base_addr(port);
-  //     return sys_call_void(inet_aton, ip.begin(), &addr.sin_addr).transform([&]() { return addr;
-  //     });
-  //   }
-
-  // public:
-  //   sock(file_type f, net_addr_family domain, net_protocol protocol) noexcept :
-  //     __f{std::move(f)}, __dom{domain}, __protocol(protocol) {}
-
-  //   net_protocol protocol() const noexcept {
-  //     return __protocol;
-  //   }
-  //   net_addr_family domain() const noexcept {
-  //     return __dom;
-  //   }
-
-  //   std::expected<void, io_error> listen_at(std::string_view addr, int port, int backlog)
-  //   noexcept {
-  //     return __addr(addr, port)
-  //       .and_then([&](auto addr) {
-  //         return sys_call_void(
-  //           bind, __f.fd(), reinterpret_cast<const struct sockaddr *>(&addr), sizeof(addr)
-  //         );
-  //       })
-  //       .and_then([&]() { return sys_call_void(::listen, __f.fd(), backlog); });
-  //   }
-  //   std::expected<sock_rw, io_error> connect(std::string_view addr, int port) noexcept {
-  //     return __addr(addr, port).and_then([&](auto addr) {
-  //       return sys_call_void(
-  //                ::connect, __f.fd(), reinterpret_cast<const struct sockaddr *>(&addr),
-  //                sizeof(addr)
-  //       )
-  //         .transform([&]() { return sock_rw{std::move(__f), __dom, __protocol, port}; });
-  //     });
-  //   }
-  //   std::expected<void, io_error> listen(int port, int backlog) noexcept {
-  //     struct sockaddr_in addr = __addr(port);
-  //     return sys_call_void(
-  //              bind, __f.fd(), reinterpret_cast<const struct sockaddr *>(&addr), sizeof(addr)
-  //     )
-  //       .and_then([&]() { return sys_call_void(::listen, __f.fd(), backlog); });
-  //   }
-  // };
-
-  // export struct sock_options {
-  // private:
-  //   net_addr_family __dom;
-  //   net_protocol __protocol;
-
-  // public:
-  //   sock_options() noexcept : __dom{net_addr_family::LOCAL}, __protocol{net_protocol::TCP} {}
-  //   sock_options &domain(net_addr_family dom) noexcept {
-  //     __dom = dom;
-  //     return *this;
-  //   }
-  //   sock_options &protocol(net_protocol prot) noexcept {
-  //     __protocol = prot;
-  //     return *this;
-  //   }
-  //   sock_options &tcp() noexcept {
-  //     return protocol(net_protocol::TCP);
-  //   }
-  //   sock_options &udp() noexcept {
-  //     return protocol(net_protocol::UDP);
-  //   }
-
-  //   std::expected<sock, io_error> open() {
-  //     return sys_call(
-  //              socket,
-  //              addr_family_to_sys[static_cast<int>(__dom)],
-  //              protocol_to_sys[static_cast<int>(__protocol)],
-  //              0
-  //     )
-  //       .transform([&](auto &&f) { return file_type{f}; })
-  //       .and_then([&](auto &&f) {
-  //         return sys_fcntl_or_flag{O_NONBLOCK | O_CLOEXEC}(f.fd()).transform([&]() {
-  //           return sock{std::move(f), __dom, __protocol};
-  //         });
-  //       });
-  //   }
-  // };
+  export using ipv4_sock_options = sock_options<ipv4_address>;
+  export using local_sock_options = sock_options<local_address>;
+  export using ipv4_sock_rw = sock_options<ipv4_address>;
+  export using local_sock_rw = sock_options<local_address>;
+  export using ipv4_sock_free = sock_free<ipv4_address, sock_state::FREE>;
+  export using ipv4_bind_sock_free = sock_free<ipv4_address, sock_state::BIND>;
+  export using ipv4_listen_sock_free = sock_free<ipv4_address, sock_state::LISTEN>;
+  export using local_sock_free = sock_free<local_address, sock_state::FREE>;
+  export using local_bind_sock_free = sock_free<local_address, sock_state::BIND>;
+  export using local_listena_sock_free = sock_free<local_address, sock_state::LISTEN>;
 }
