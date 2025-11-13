@@ -30,4 +30,16 @@ namespace jowi::io {
       return std::move(f);
     }
   };
+
+  struct BasicOsFile {
+  private:
+    int __fd;
+
+  public:
+    OsFile(int fd) : __fd{fd} {}
+
+    int native_handle() {
+      return __fd;
+    }
+  };
 }
