@@ -7,220 +7,145 @@ module;
 export module jowi.io:buffer;
 import jowi.generic;
 
-/**
- * @file buffer.cc
- * @brief Buffer utilities that provide read/write concepts and concrete buffer implementations.
- */
-
 namespace jowi::io {
-  /**
-   * @brief Concept describing the readable portion of a buffer abstraction.
-   */
   export template <class buffer_type>
-  concept is_readable_buffer = requires(buffer_type b, const buffer_type cb, uint64_t w_size) {
-    { cb.read_buf() } -> std::same_as<std::string_view>;
-    { cb.read_beg() } -> std::same_as<const char *>;
-    { cb.read_end() } -> std::same_as<const char *>;
-    { cb.read_size() } -> std::same_as<uint64_t>;
-    { cb.is_full() } -> std::same_as<bool>;
+  concept WritableBuffer = requires(buffer_type b, const buffer_type cb, size_t w_size) {
+    // start of the writable buffer
+    { b.write_beg() } -> std::same_as<void *>;
+    /*
+     * mark the buffer as n bytes written. ASSUMING CONTIGUOUS WRITES.
+     */
+    { b.mark_write(w_size) } -> std::same_as<size_t>;
+    /*
+     * amount of bytes writable into write_beg, this should be CONTIGUOUS WRITES.
+     */
+    { cb.writable_size() } -> std::same_as<size_t>;
+    // if the buffer is full
+    { cb.is_writable() } -> std::same_as<bool>;
   };
-  /**
-   * @brief Concept describing the writable portion of a buffer abstraction.
-   */
-  export template <class buffer_type>
-  concept is_writable_buffer = requires(buffer_type b, const buffer_type cb) {
-    { b.write_beg() } -> std::same_as<char *>;
-    { cb.writable_size() } -> std::same_as<uint64_t>;
-    { b.finish_write(std::declval<uint64_t>()) } -> std::same_as<void>;
-    { b.reset() } -> std::same_as<void>;
-  };
-  /**
-   * @brief Convenience concept that requires both readable and writable semantics.
-   */
-  export template <class buffer_type>
-  concept is_rw_buffer = is_readable_buffer<buffer_type> && is_writable_buffer<buffer_type>;
 
-  /**
-   * @brief Dynamically sized buffer that grows to accommodate read and write operations.
+  export template <class buffer_type>
+  concept ReadableBuffer = requires(buffer_type b, const buffer_type cb, size_t r_size) {
+    /*
+     * start of the readable buffer. HAS TO BE CONTIGUOUS with read_end()
+     */
+    { cb.read_beg() } -> std::same_as<const void *>;
+    /*
+     * end of the readable buffer. HAS TO BE CONTIGUOUS with read_beg()
+     */
+    { cb.read_end() } -> std::same_as<const void *>;
+    /*
+     * read the buffer as a string_view
+     */
+    { cb.read() } -> std::same_as<std::string_view>;
+    /*
+     * mark n amounts to be read.
+     */
+    { b.mark_read(r_size) } -> std::same_as<size_t>;
+    /*
+     * get the amount of readable bytes (contiguous)
+     */
+    { cb.readable_size() } -> std::same_as<size_t>;
+    /*
+     * if there is anything to read
+     */
+    { cb.is_readable() } -> std::same_as<bool>;
+  };
+
+  export template <class buffer_type>
+  concept RwBuffer = ReadableBuffer<buffer_type> && WritableBuffer<buffer_type>;
+
+  export template <WritableBuffer Buffer> struct BufferWriteMarker {
+    Buffer &buf;
+    void operator()(size_t size) const noexcept {
+      buf.mark_write(size);
+    }
+  };
+  /*
+   * dyn buffer is a circular buffer that is designed to abstract away the use of a circular buffer
+   * in read and write. DynBuffer controls two pointer
+   * - read_ptr: the read_ptr will maximally be the same as the write_ptr.
+   * - write_ptr: the write_ptr cannot write past the read_ptr.
+   * i.e.
+   * read_ptr can move to overlap with write_ptr and write_ptr can move to overlap with read_ptr
    */
-  export struct dyn_buffer {
+  export struct DynBuffer {
   private:
-    std::string __buf;
-    uint64_t __buf_size;
+    std::vector<char> __buf;
+    size_t __read_ptr;
+    size_t __write_ptr;
 
   public:
-    /**
-     * @brief Constructs the buffer with an optional reserved size.
-     * @param init_buf_size Initial capacity to reserve for the buffer.
-     */
-    dyn_buffer(size_t init_buf_size = 2048) {
-      __buf.reserve(init_buf_size);
-      auto inserter = std::back_inserter(__buf);
-      std::ranges::fill_n(inserter, init_buf_size, '\0');
-      __buf_size = 0;
+    constexpr DynBuffer(size_t capacity) : __buf(capacity, '\0'), __read_ptr(0), __write_ptr(0) {}
+
+    constexpr size_t capacity() const noexcept {
+      return __buf.size();
     }
 
-    // is_readable_buffer
-    /**
-     * @brief Returns pointer to the beginning of the readable region.
-     * @return Pointer to the start of readable data.
-     */
-    const char *read_beg() const noexcept {
-      return __buf.begin().base();
-    }
-    /**
-     * @brief Returns pointer to the end of the readable region.
-     * @return Pointer past the last readable byte.
-     */
-    const char *read_end() const noexcept {
-      return (__buf.begin() + __buf_size).base();
-    }
-    /**
-     * @brief Returns a view over the readable contents.
-     * @return View spanning the readable data.
-     */
-    std::string_view read_buf() const noexcept {
-      return std::string_view{read_beg(), read_end()};
-    }
-    /**
-     * @brief Returns the number of readable bytes in the buffer.
-     * @return Count of readable bytes.
-     */
-    uint64_t read_size() const noexcept {
-      return __buf_size;
-    }
-    /**
-     * @brief Checks whether the buffer is fully utilized.
-     * @return True when writable capacity is exhausted.
-     */
-    bool is_full() const noexcept {
-      return __buf.size() == __buf_size;
+    // Write Section
+    constexpr void *write_beg() noexcept {
+      return static_cast<void *>((__buf.begin() + __write_ptr).base());
     }
 
-    // is_writable_buffer
-    /**
-     * @brief Returns pointer to the start of the writable region.
-     * @return Pointer to where new bytes can be written.
-     */
-    char *write_beg() noexcept {
-      return (__buf.begin() + __buf_size).base();
-    }
-    /**
-     * @brief Returns how many bytes can still be written before growth is required.
-     * @return Remaining writable capacity.
-     */
-    uint64_t writable_size() const noexcept {
-      return std::distance(
-        static_cast<std::string::const_iterator>(__buf.begin() + __buf_size), __buf.end()
-      );
-    }
-    /**
-     * @brief Advances the write cursor by the provided amount.
-     * @param w_size Number of bytes that have been written into the buffer.
-     */
-    void finish_write(uint64_t w_size) noexcept {
-      w_size = std::min(w_size, writable_size());
-      __buf_size += w_size;
-    }
-    /**
-     * @brief Resets the readable region without releasing capacity.
-     */
-    void reset() noexcept {
-      __buf_size = 0;
+    constexpr size_t mark_write(size_t w_size) noexcept {
+      size_t max_offset = max_write_offset();
+      size_t prev_write = __write_ptr;
+      __write_ptr = std::min(max_offset, __write_ptr + w_size);
+      return __write_ptr - prev_write;
     }
 
-    // specific
-    /**
-     * @brief Resizes the underlying storage and clamps the readable size if needed.
-     * @param new_size New capacity to allocate.
-     */
-    void resize(uint64_t new_size) noexcept {
-      __buf.resize(new_size);
-      __buf_size = std::min(__buf_size, new_size);
+    constexpr size_t writable_size() const noexcept {
+      return max_write_offset() - __write_ptr;
+    }
+
+    constexpr bool is_writable() const noexcept {
+      return writable_size() != 0;
+    }
+
+    // Read Section
+    constexpr const void *read_beg() const noexcept {
+      return static_cast<const void *>((__buf.begin() + __read_ptr).base());
+    }
+
+    constexpr const void *read_end() const noexcept {
+      return static_cast<const void *>((__buf.begin() + max_read_offset()).base());
+    }
+
+    constexpr std::string_view read() const noexcept {
+      return std::string_view{
+        static_cast<const char *>(read_beg()), static_cast<const char *>(read_end())
+      };
+    }
+
+    constexpr size_t mark_read(size_t read_size) noexcept {
+      size_t max_offset = max_read_offset();
+      size_t prev_read = __read_ptr;
+      __read_ptr = std::min(max_offset, read_size + prev_read);
+      if (__read_ptr == capacity() && __write_ptr == capacity()) __write_ptr = 0;
+      __read_ptr = __read_ptr % capacity();
+      return __read_ptr - prev_read;
+    }
+
+    constexpr size_t readable_size() const noexcept {
+      // contiguity guarantees that the read offset > __read_ptr
+      return max_read_offset() - __read_ptr;
+    }
+
+    constexpr bool is_readable() const noexcept {
+      return readable_size() != 0;
+    }
+
+    inline constexpr size_t max_read_offset() const noexcept {
+      // read offset is max_readable_index + 1.
+      if (__read_ptr <= __write_ptr) return __write_ptr;
+      else
+        return capacity();
+    }
+
+    inline constexpr size_t max_write_offset() const noexcept {
+      if (__write_ptr < __read_ptr) return __read_ptr;
+      else
+        return capacity();
     }
   };
-
-  /**
-   * @brief Fixed capacity buffer backed by a compile-time sized static string.
-   */
-  export template <uint64_t N> struct fixed_buffer {
-  private:
-    generic::fixed_string<N> __buf;
-
-  public:
-    /**
-     * @brief Creates an empty fixed buffer.
-     */
-    fixed_buffer() : __buf{} {}
-
-    // is_readable_buffer
-    /**
-     * @brief Returns a view over the readable contents.
-     * @return View spanning the readable data.
-     */
-    std::string_view read_buf() const noexcept {
-      return std::string_view{__buf};
-    }
-    /**
-     * @brief Returns pointer to the beginning of the readable region.
-     * @return Pointer to the start of readable data.
-     */
-    const char *read_beg() const noexcept {
-      return __buf.cbegin();
-    }
-    /**
-     * @brief Returns pointer to the end of the readable region.
-     * @return Pointer past the last readable byte.
-     */
-    const char *read_end() const noexcept {
-      return __buf.cend();
-    }
-    /**
-     * @brief Returns the current number of readable bytes.
-     * @return Count of readable bytes.
-     */
-    uint64_t read_size() const noexcept {
-      return __buf.length();
-    }
-    /**
-     * @brief Checks whether the buffer has no remaining capacity.
-     * @return True when the buffer is full.
-     */
-    bool is_full() const noexcept {
-      return N == __buf.length();
-    }
-
-    // is_writable_buffer
-    /**
-     * @brief Returns pointer to the beginning of the writable region.
-     * @return Pointer to where new bytes can be written.
-     */
-    char *write_beg() noexcept {
-      return __buf.end();
-    }
-    /**
-     * @brief Returns the remaining writable capacity.
-     * @return Remaining writable capacity.
-     */
-    uint64_t writable_size() const noexcept {
-      return __buf.empty_space();
-    }
-    /**
-     * @brief Advances the write cursor by the provided amount.
-     * @param w_size Number of bytes that have been written into the buffer.
-     */
-    void finish_write(uint64_t w_size) noexcept {
-      w_size = std::min(w_size, writable_size());
-      __buf.unsafe_set_length(w_size);
-    }
-    /**
-     * @brief Clears the readable contents without modifying the capacity.
-     */
-    void reset() noexcept {
-      __buf.unsafe_set_length(0);
-    }
-  };
-
-  static_assert(is_rw_buffer<fixed_buffer<2048>>);
-  static_assert(is_rw_buffer<dyn_buffer>);
 }

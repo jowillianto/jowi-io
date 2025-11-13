@@ -10,8 +10,12 @@ if (NOT TARGET jowi::generic)
   add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/jowi-generic)
 endif()
 
+if (NOT TARGET jowi::asio)
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/libs/jowi-asio)
+endif()
+
 file(
-  GLOB ${PROJECT_NAME}_src 
+  GLOB ${PROJECT_NAME}_src
     ${CMAKE_CURRENT_LIST_DIR}/src/*.cc
     ${CMAKE_CURRENT_LIST_DIR}/src/reader_writer/*.cc
 )
@@ -27,9 +31,10 @@ target_sources(${PROJECT_NAME}
   PUBLIC
     FILE_SET CXX_MODULES FILES ${${PROJECT_NAME}_src} ${${PROJECT_NAME}_src_sys_call}
 )
-target_link_libraries(${PROJECT_NAME} 
-  PRIVATE 
+target_link_libraries(${PROJECT_NAME}
+  PRIVATE
     jowi::generic
+    jowi::asio
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_23)
 
@@ -43,17 +48,17 @@ if (JOWI_INSTALL)
   include(GNUInstallDirs)
   set (JOWI_COMPONENT_NAME "io")
   set_property(
-    TARGET ${PROJECT_NAME} 
+    TARGET ${PROJECT_NAME}
     PROPERTY EXPORT_NAME ${JOWI_COMPONENT_NAME}
   )
   install (
     TARGETS ${PROJECT_NAME}
     EXPORT jowi
-    FILE_SET 
-      CXX_MODULES 
+    FILE_SET
+      CXX_MODULES
       DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/jowi/${JOWI_COMPONENT_NAME}
       COMPONENT ${JOWI_COMPONENT_NAME}_file_set
-    CXX_MODULES_BMI 
+    CXX_MODULES_BMI
       COMPONENT ${JOWI_COMPONENT_NAME}
       DESTINATION ${CMAKE_INSTALL_PREFIX}/cxx_modules/jowi/${JOWI_COMPONENT_NAME}
   )

@@ -19,6 +19,7 @@ jowi_add_test(
   LIBRARIES
     jowi::io 
     jowi::generic
+    jowi::asio
   SANITIZERS all
 )
 

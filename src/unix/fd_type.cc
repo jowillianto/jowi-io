@@ -1,7 +1,8 @@
 module;
 #include <unistd.h>
+#include <utility>
 export module jowi.io:fd_type;
-import :file_descriptor;
+import jowi.generic;
 
 namespace jowi::io {
   /**
@@ -11,7 +12,7 @@ namespace jowi::io {
   /**
    * @brief Functor responsible for closing native file descriptors.
    */
-  export struct file_closer {
+  export struct FileCloser {
     /**
      * @brief Invokes `close` on the supplied descriptor.
      * @param fd Native file descriptor to close.
@@ -21,12 +22,12 @@ namespace jowi::io {
     }
   };
 
-  /**
-   * @brief Owning file descriptor type for POSIX systems.
-   */
-  export using file_type = file_descriptor<int, file_closer>;
-  /**
-   * @brief Non-owning view over a native file descriptor.
-   */
-  export using file_handle_type = file_handle<int>;
+  export using FileDescriptor = generic::UniqueHandle<int, FileCloser>;
+
+  struct FileDescriptorMover {
+    FileDescriptor f;
+    FileDescriptor operator()() {
+      return std::move(f);
+    }
+  };
 }

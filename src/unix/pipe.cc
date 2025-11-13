@@ -8,11 +8,10 @@ module;
 #include <unistd.h>
 #include <utility>
 export module jowi.io:pipe;
-import jowi.generic;
+import jowi.asio;
 import :fd_type;
 import :error;
-import :sys_util;
-import :sys_file;
+import :sys_call;
 
 /**
  * @file unix/pipe.cc
@@ -20,17 +19,17 @@ import :sys_file;
  */
 
 namespace jowi::io {
-  export struct reader_pipe;
-  export struct writer_pipe;
-  export std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(
+  export struct ReaderPipe;
+  export struct WriterPipe;
+  export std::expected<std::pair<ReaderPipe, WriterPipe>, IoError> open_pipe(
     bool non_blocking = true
   ) noexcept;
 
-  export struct reader_pipe {
+  export struct ReaderPipe {
   private:
-    file_type __f;
-    reader_pipe(file_type f) : __f{std::move(f)} {}
-    friend std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(bool) noexcept;
+    FileDescriptor __f;
+    ReaderPipe(FileDescriptor f) : __f{std::move(f)} {}
+    friend std::expected<std::pair<ReaderPipe, WriterPipe>, IoError> open_pipe(bool) noexcept;
 
   public:
     /**
@@ -38,34 +37,37 @@ namespace jowi::io {
      * @param buf Writable buffer receiving bytes.
      * @return Success or IO error.
      */
-    std::expected<void, io_error> read(is_writable_buffer auto &buf) noexcept {
-      return sys_read(__f.fd(), buf);
+    std::expected<void, IoError> read(WritableBuffer auto &buf) noexcept {
+      return sys_read(__f, buf);
+    }
+    template <WritableBuffer buf_type>
+    asio::InfiniteAwaiter<SysReadPoller<buf_type>> aread(buf_type &buf) noexcept {
+      return {__f, buf};
     }
 
+    template <WritableBuffer buf_type>
+    asio::TimedAwaiter<SysReadPoller<buf_type>> aread(
+      buf_type &buf, std::chrono::milliseconds dur
+    ) noexcept {
+      return {dur, __f, buf};
+    }
     /**
      * @brief Checks if the pipe has data available within the timeout window.
      * @param timeout Duration to wait before timing out.
      * @return True when readable, false on timeout, or IO error.
      */
-    std::expected<bool, io_error> is_readable(
-      std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
-    ) const noexcept {
-      return sys_file_poller::read_poller().timeout(timeout)(__f.fd());
+    std::expected<bool, IoError> is_readable() const noexcept {
+      return sys_poll_in(__f);
     }
-
-    /**
-     * @brief Returns a borrowed handle for the underlying descriptor.
-     * @return Non-owning file handle.
-     */
-    file_handle<int> handle() const {
-      return __f.borrow();
+    auto native_handle() const noexcept {
+      return __f.get_or(-1);
     }
   };
-  export struct writer_pipe {
+  export struct WriterPipe {
   private:
-    file_type __f;
-    writer_pipe(file_type f) : __f{std::move(f)} {}
-    friend std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(bool) noexcept;
+    FileDescriptor __f;
+    WriterPipe(FileDescriptor f) : __f{std::move(f)} {}
+    friend std::expected<std::pair<ReaderPipe, WriterPipe>, IoError> open_pipe(bool) noexcept;
 
   public:
     /**
@@ -73,26 +75,28 @@ namespace jowi::io {
      * @param v View describing the bytes to send.
      * @return Number of bytes written or IO error.
      */
-    std::expected<size_t, io_error> write(std::string_view v) noexcept {
-      return sys_write(__f.fd(), v);
+    std::expected<size_t, IoError> write(std::string_view v) noexcept {
+      return sys_write(__f, v);
+    }
+    asio::InfiniteAwaiter<SysWritePoller> awrite(std::string_view v) noexcept {
+      return {__f, v};
+    }
+    asio::TimedAwaiter<SysWritePoller> awrite(
+      std::string_view v, std::chrono::milliseconds dur
+    ) noexcept {
+      return {dur, __f, v};
     }
     /**
      * @brief Checks if the pipe can accept data within the timeout window.
      * @param timeout Duration to wait before timing out.
      * @return True when writable, false on timeout, or IO error.
      */
-    std::expected<bool, io_error> is_writable(
-      std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
-    ) const noexcept {
-      return sys_file_poller::write_poller().timeout(timeout)(__f.fd());
+    std::expected<bool, IoError> is_writable() const noexcept {
+      return sys_poll_out(__f);
     }
 
-    /**
-     * @brief Returns a borrowed handle for the underlying descriptor.
-     * @return Non-owning file handle.
-     */
-    file_handle<int> handle() const {
-      return __f.borrow();
+    auto native_handle() const noexcept {
+      return __f.get_or(-1);
     }
   };
 
@@ -101,18 +105,11 @@ namespace jowi::io {
    * @param non_blocking When true, applies non-blocking and close-on-exec flags.
    * @return Pair of pipe endpoints or IO error.
    */
-  export std::expected<std::pair<reader_pipe, writer_pipe>, io_error> open_pipe(
+  export std::expected<std::pair<ReaderPipe, WriterPipe>, IoError> open_pipe(
     bool non_blocking
   ) noexcept {
-    std::array<int, 2> pipe_fd;
-    return sys_call(pipe, pipe_fd.data()).and_then([&](auto &&) {
-      file_type r_fd{pipe_fd[0]};
-      file_type w_fd{pipe_fd[1]};
-      return sys_fcntl_or_flag{}.flags_or(O_NONBLOCK | O_CLOEXEC)(r_fd.fd()).and_then([&]() {
-        return sys_fcntl_or_flag{}.flags_or(O_NONBLOCK | O_CLOEXEC)(w_fd.fd()).transform([&]() {
-          return std::pair{reader_pipe{std::move(r_fd)}, writer_pipe{std::move(w_fd)}};
-        });
-      });
+    return sys_pipe(non_blocking).transform([](auto p) {
+      return std::pair{ReaderPipe{std::move(p.first)}, WriterPipe{std::move(p.second)}};
     });
   }
 }

@@ -13,10 +13,10 @@ namespace jowi::io {
   /**
    * @brief Exception wrapper carrying an errno value and formatted message.
    */
-  export struct io_error : public std::exception {
+  export struct IoError : public std::exception {
   private:
     int __err_code;
-    generic::fixed_string<64> __msg;
+    generic::FixedString<64> __msg;
 
   public:
     /**
@@ -26,7 +26,7 @@ namespace jowi::io {
      * @param args Format arguments.
      */
     template <class... Args> requires(std::formattable<Args, char> && ...)
-    io_error(int err_code, std::format_string<Args...> fmt, Args &&...args) noexcept :
+    IoError(int err_code, std::format_string<Args...> fmt, Args &&...args) noexcept :
       __err_code{err_code}, __msg{} {
       __msg.emplace_format(fmt, std::forward<Args>(args)...);
     }
@@ -51,8 +51,8 @@ namespace jowi::io {
      * @param err_no Error number used to produce the message.
      * @return IO error containing errno and associated string message.
      */
-    static io_error str_error(int err_no) noexcept {
-      return io_error{err_no, "{}", ::strerror(err_no)};
+    static IoError str_error(int err_no) noexcept {
+      return IoError{err_no, "{}", ::strerror(err_no)};
     }
   };
 }

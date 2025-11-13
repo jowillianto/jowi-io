@@ -22,13 +22,13 @@ namespace jowi::io::http {
   /**
    * @brief Error categories encountered while parsing HTTP data.
    */
-  export enum struct http_error_type { empty_string = 0, invalid_value, io_error };
+  export enum struct HttpErrorType { empty_string = 0, invalid_value, io_error };
   /**
    * @brief Lightweight error type carrying HTTP parsing metadata.
    */
-  export struct http_error {
+  export struct HttpError {
   private:
-    http_error_type __t;
+    HttpErrorType __t;
     generic::fixed_string<64> __msg;
 
   public:
@@ -39,7 +39,7 @@ namespace jowi::io::http {
      * @param args Additional arguments formatted into the message.
      */
     template <class... Args> requires(std::formattable<Args, char> && ...)
-    http_error(http_error_type t, std::format_string<Args...> fmt, Args &&...args) noexcept :
+    HttpError(HttpErrorType t, std::format_string<Args...> fmt, Args &&...args) noexcept :
       __t{t}, __msg{} {
       __msg.emplace_format(fmt, std::forward<Args>(args)...);
     }
@@ -56,7 +56,7 @@ namespace jowi::io::http {
      * @brief Retrieves the error category.
      * @return Enumerated error type.
      */
-    http_error_type type() const noexcept {
+    HttpErrorType type() const noexcept {
       return __t;
     }
 
@@ -65,18 +65,18 @@ namespace jowi::io::http {
      * @param e Source IO error.
      * @return HTTP error containing the IO error message.
      */
-    static http_error from_io_error(io_error e) {
-      return http_error{http_error_type::io_error, "{}", e.what()};
+    static HttpError from_io_error(IoError e) {
+      return HttpError{HttpErrorType::io_error, "{}", e.what()};
     }
   };
 
   /**
    * @brief Represents an HTTP status code with optional textual description lookup.
    */
-  export struct http_status {
+  export struct HttpStatus {
   private:
-    using status_map_entry = std::pair<unsigned int, generic::fixed_string<40>>;
-    static std::vector<status_map_entry> __status_to_name;
+    using StatusMapEntry = std::pair<unsigned int, generic::fixed_string<40>>;
+    static std::vector<StatusMapEntry> __status_to_name;
     unsigned int __code;
 
   public:
@@ -84,7 +84,7 @@ namespace jowi::io::http {
      * @brief Stores the status code for later inspection.
      * @param code HTTP status code value.
      */
-    http_status(unsigned int code) : __code{code} {}
+    HttpStatus(unsigned int code) : __code{code} {}
 
     /**
      * @brief Returns the numeric status code.
@@ -108,7 +108,7 @@ namespace jowi::io::http {
      * @return Optional view containing the status text, or nullopt if unknown.
      */
     static std::optional<std::string_view> status_name(unsigned int code) noexcept {
-      auto it = std::ranges::find(__status_to_name, code, &status_map_entry::first);
+      auto it = std::ranges::find(__status_to_name, code, &StatusMapEntry::first);
       if (it == __status_to_name.end()) {
         return std::nullopt;
       }
@@ -119,19 +119,19 @@ namespace jowi::io::http {
   /**
    * @brief Container for HTTP header key-value pairs with validation helpers.
    */
-  export struct http_header {
-    using http_header_entry = std::pair<std::string, std::string>;
+  export struct HttpHeader {
+    using HttpHeaderEntry = std::pair<std::string, std::string>;
 
   private:
     constexpr static generic::fixed_string __valid_header_pattern{"^[a-zA-Z0-9_-]+$"};
     constexpr static generic::fixed_string __valid_value_pattern{"^.+$"};
-    std::vector<http_header_entry> __headers;
+    std::vector<HttpHeaderEntry> __headers;
 
   public:
     /**
      * @brief Constructs an empty header set.
      */
-    http_header() : __headers{} {}
+    HttpHeader() : __headers{} {}
 
     /**
      * @brief Adds a header entry after validating name and value.
@@ -139,7 +139,7 @@ namespace jowi::io::http {
      * @param value Header value.
      * @return Success or validation error.
      */
-    std::expected<void, http_error> add_header(std::string_view name, std::string_view value) {
+    std::expected<void, HttpError> add_header(std::string_view name, std::string_view value) {
       return validate_header_name(name).and_then([&]() {
         return validate_header_value(value).transform([&]() {
           __headers.emplace_back(std::string{name}, std::string{value});
@@ -152,7 +152,7 @@ namespace jowi::io::http {
      * @param line Single `name: value` header line.
      * @return Success or validation error.
      */
-    std::expected<void, http_error> add_header(std::string_view line) {
+    std::expected<void, HttpError> add_header(std::string_view line) {
       return validate_header_line(line).transform([&](auto &&p) {
         __headers.emplace_back(std::move(p.first), std::move(p.second));
       });
@@ -167,7 +167,7 @@ namespace jowi::io::http {
     std::optional<std::string_view> first_of(
       const generic::is_comparable<std::string> auto &name
     ) const noexcept {
-      auto it = std::ranges::find(__headers, name, &http_header_entry::first);
+      auto it = std::ranges::find(__headers, name, &HttpHeaderEntry::first);
       if (it == __headers.end()) {
         return std::nullopt;
       }
@@ -185,7 +185,7 @@ namespace jowi::io::http {
         std::ranges::filter_view{
           __headers, [name = std::move(name)](const auto &p) { return name == p.first; }
         },
-        &http_header_entry::second
+        &HttpHeaderEntry::second
       };
     }
 
@@ -237,16 +237,16 @@ namespace jowi::io::http {
      * @param name Header name to validate.
      * @return Success or descriptive validation error.
      */
-    static std::expected<void, http_error> validate_header_name(std::string_view name) noexcept {
+    static std::expected<void, HttpError> validate_header_name(std::string_view name) noexcept {
       if (name.empty()) {
         return std::unexpected{
-          http_error{http_error_type::empty_string, "header name cannot be empty"}
+          HttpError{HttpErrorType::empty_string, "header name cannot be empty"}
         };
       }
       auto reg_exp = std::regex{__valid_header_pattern.c_str()};
       if (!std::regex_match(name.begin(), name.end(), reg_exp)) {
         return std::unexpected{
-          http_error{http_error_type::invalid_value, "{} fail '{}'", name, __valid_header_pattern}
+          HttpError{HttpErrorType::invalid_value, "{} fail '{}'", name, __valid_header_pattern}
         };
       }
       return {};
@@ -256,16 +256,16 @@ namespace jowi::io::http {
      * @param value Header value to validate.
      * @return Success or descriptive validation error.
      */
-    static std::expected<void, http_error> validate_header_value(std::string_view value) noexcept {
+    static std::expected<void, HttpError> validate_header_value(std::string_view value) noexcept {
       if (value.empty()) {
         return std::unexpected{
-          http_error{http_error_type::empty_string, "header value cannot be empty"}
+          HttpError{HttpErrorType::empty_string, "header value cannot be empty"}
         };
       }
       auto reg_exp = std::regex{__valid_value_pattern.c_str()};
       if (!std::regex_match(value.begin(), value.end(), reg_exp)) {
-        return std::unexpected{http_error{
-          http_error_type::invalid_value, "{} fail regex '{}'", value, __valid_value_pattern
+        return std::unexpected{HttpError{
+          HttpErrorType::invalid_value, "{} fail regex '{}'", value, __valid_value_pattern
         }};
       }
       return {};
@@ -275,13 +275,13 @@ namespace jowi::io::http {
      * @param line Raw header line including separator.
      * @return Pair of header name and value, or validation error.
      */
-    static std::expected<http_header_entry, http_error> validate_header_line(
+    static std::expected<HttpHeaderEntry, HttpError> validate_header_line(
       std::string_view line
     ) {
       auto colon_pos = std::ranges::find(line, ':');
       if (colon_pos == line.end()) {
         return std::unexpected{
-          http_error{http_error_type::invalid_value, "':' expected in {}", line}
+          HttpError{HttpErrorType::invalid_value, "':' expected in {}", line}
         };
       }
       auto header_value_beg =
@@ -290,7 +290,7 @@ namespace jowi::io::http {
       auto header_value = std::string_view{header_value_beg, line.end()};
       return validate_header_name(header_name).and_then([&]() {
         return validate_header_value(header_value).transform([&]() {
-          return http_header_entry{std::string{header_name}, std::string{header_value}};
+          return HttpHeaderEntry{std::string{header_name}, std::string{header_value}};
         });
       });
     }
@@ -299,8 +299,8 @@ namespace jowi::io::http {
      * @param lines Block of header lines separated by `\r\n`.
      * @return Header container or validation error.
      */
-    static std::expected<http_header, http_error> validate_header_lines(std::string_view lines) {
-      auto header = http_header{};
+    static std::expected<HttpHeader, HttpError> validate_header_lines(std::string_view lines) {
+      auto header = HttpHeader{};
       for (auto &&line : std::ranges::split_view{lines, "\r\n"}) {
         auto header_line = std::string_view{line.begin(), line.end()};
         if (header_line.empty()) continue;
@@ -313,7 +313,7 @@ namespace jowi::io::http {
     }
   };
 
-  export struct http_path {
+  export struct HttpPath {
   private:
     std::string __path;
 
@@ -322,22 +322,22 @@ namespace jowi::io::http {
      * @brief Wraps an HTTP path string for additional helpers.
      * @param path HTTP path string.
      */
-    http_path(std::string path) : __path{std::move(path)} {}
+    HttpPath(std::string path) : __path{std::move(path)} {}
   };
 
   /**
    * @brief Basic configuration produced by parsing the start line and headers.
    */
-  export struct http_config {
+  export struct HttpConfig {
     std::string method;
     std::string path;
-    http_header headers;
+    HttpHeader headers;
   };
 
-  export template <is_rw_buffer buffer_type, is_readable file_type>
-  struct http_reader : private byte_reader<buffer_type, file_type> {
+  export template <IsRwBuffer buffer_type, IsReadable FileType>
+  struct HttpReader : private ByteReader<buffer_type, FileType> {
   protected:
-    using byte_reader = byte_reader<buffer_type, file_type>;
+    using ReaderBase = ByteReader<buffer_type, FileType>;
 
   private:
     /**
@@ -345,8 +345,8 @@ namespace jowi::io::http {
      * @param header Header container to populate.
      * @return Success or HTTP parsing error.
      */
-    std::expected<void, http_error> __read_header(http_header &header) {
-      auto header_line = byte_reader::read_until('\n').transform_error(http_error::from_io_error);
+    std::expected<void, HttpError> __read_header(HttpHeader &header) {
+      auto header_line = ReaderBase::read_until('\n').transform_error(HttpError::from_io_error);
       if (!header_line) {
         return std::unexpected{header_line.error()};
       }
@@ -354,7 +354,7 @@ namespace jowi::io::http {
         return {};
       }
       if (!header_line->ends_with('\r')) {
-        return std::unexpected{http_error{http_error_type::invalid_value, "\r is missing"}};
+        return std::unexpected{HttpError{HttpErrorType::invalid_value, "\r is missing"}};
       }
       return header
         .add_header(
@@ -369,23 +369,23 @@ namespace jowi::io::http {
      * @param buf Buffer used for staged reads.
      * @param f Readable file or socket.
      */
-    http_reader(buffer_type buf, file_type f) : byte_reader{std::move(buf), std::move(f)} {}
+    HttpReader(buffer_type buf, FileType f) : ReaderBase{std::move(buf), std::move(f)} {}
 
     /**
      * @brief Reads the request/response start line followed by headers.
      * @return Parsed HTTP configuration or error.
      */
-    std::expected<http_config, http_error> read_config() {
-      return byte_reader::read_until(' ')
+    std::expected<HttpConfig, HttpError> read_config() {
+      return ReaderBase::read_until(' ')
         .and_then([&](auto &&method) {
-          return byte_reader::read_until(' ').and_then([&](auto &&path) {
-            return byte_reader::read_until('\n').transform([&](auto &&) {
-              return http_config{std::move(method), std::move(path), http_header{}};
+          return ReaderBase::read_until(' ').and_then([&](auto &&path) {
+            return ReaderBase::read_until('\n').transform([&](auto &&) {
+              return HttpConfig{std::move(method), std::move(path), HttpHeader{}};
             });
           });
         })
-        .transform_error(http_error::from_io_error)
-        .and_then([&](auto &&conf) -> std::expected<http_config, http_error> {
+        .transform_error(HttpError::from_io_error)
+        .and_then([&](auto &&conf) -> std::expected<HttpConfig, HttpError> {
           return __read_header(conf.headers).transform([&]() { return std::move(conf); });
         });
     }
@@ -396,7 +396,7 @@ namespace jowi::io::http {
  * @brief Static lookup table mapping HTTP status codes to canonical text.
  */
 std::vector<std::pair<unsigned int, jowi::generic::fixed_string<40>>>
-  jowi::io::http::http_status::__status_to_name = {
+  jowi::io::http::HttpStatus::__status_to_name = {
     // 1XX
     {100, jowi::generic::fixed_string<40>("CONTINUE")},
     {101, jowi::generic::fixed_string<40>("SWITCHING_PROTOCOLS")},
