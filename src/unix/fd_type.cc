@@ -31,14 +31,14 @@ namespace jowi::io {
     }
   };
 
-  struct BasicOsFile {
+  export struct BasicOsFile {
   private:
     int __fd;
 
   public:
     BasicOsFile(int fd) : __fd{fd} {}
 
-    int native_handle() {
+    int native_handle() const noexcept {
       return __fd;
     }
   };
