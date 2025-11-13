@@ -36,7 +36,7 @@ namespace jowi::io {
     int __fd;
 
   public:
-    OsFile(int fd) : __fd{fd} {}
+    BasicOsFile(int fd) : __fd{fd} {}
 
     int native_handle() {
       return __fd;
