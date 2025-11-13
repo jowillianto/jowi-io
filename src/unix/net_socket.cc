@@ -191,4 +191,101 @@ namespace jowi::io {
       })
       .transform([&](FileDescriptor f) { return TcpSocket{addr, std::move(f)}; });
   }
+
+  // UDP Section
+  export template <NetAddress Addr> struct UdpSocket {
+  private:
+    FileDescriptor __f;
+
+  public:
+    UdpSocket(FileDescriptor f) : __f{std::move(f)} {}
+
+    std::expected<Addr, IoError> recv(
+      WritableBuffer auto &buf, bool non_blocking = true
+    ) const noexcept {
+      auto addr = Addr::empty();
+      auto [raw_addr, len] = addr.sys_addr();
+      auto flags = non_blocking ? MSG_DONTWAIT : 0;
+      return sys_call(
+               recvfrom, __f.get_or(-1), buf.write_beg(), buf.writable_size(), flags, raw_addr, &len
+      )
+        .transform([&](auto write_count) {
+          buf.mark_write(write_count);
+          return addr;
+        });
+    }
+
+    std::expected<int, IoError> send(
+      std::string_view data, const Addr &addr, bool non_blocking = true
+    ) {
+      auto [raw_addr, len] = addr.sys_addr();
+      auto flags = non_blocking ? MSG_DONTWAIT : 0;
+      return sys_call(
+        sendto,
+        __f.get_or(-1),
+        static_cast<const void *>(data.data()),
+        data.length(),
+        flags,
+        raw_addr,
+        len
+      );
+    }
+
+    static UdpSocket from_fd(FileDescriptor f) {
+      return UdpSocket{std::move(f)};
+    }
+    static std::expected<UdpSocket, IoError> bind(const Addr &addr) {
+      auto [raw_addr, len] = addr.sys_addr();
+      return sys_call(::socket, Addr::addr_family(), SOCK_DGRAM, 0)
+        .transform(FileDescriptor::manage_default)
+        .and_then([&](auto f) {
+          return sys_call_void(::bind, f.get_or(-1), raw_addr, len)
+            .transform(FileDescriptorMover{std::move(f)});
+        })
+        .transform(UdpSocket<Addr>::from_fd);
+    }
+    static std::expected<UdpSocket, IoError> socket() {
+      return sys_call(::socket, Addr::addr_family(), SOCK_DGRAM, 0)
+        .transform(FileDescriptor::manage_default)
+        .transform(UdpSocket<Addr>::from_fd);
+    }
+  };
+
+  export template <NetAddress Addr>
+  std::expected<UdpSocket<Addr>, IoError> create_udp_bind(const Addr &addr) {
+    return UdpSocket<Addr>::bind(addr);
+  }
+
+  export template <NetAddress Addr> std::expected<UdpSocket<Addr>, IoError> create_udp_socket() {
+    return UdpSocket<Addr>::socket();
+  }
+
+  template struct TcpSocket<Ipv4Address>;
+  template struct TcpSocket<LocalAddress>;
+  template struct TcpListener<Ipv4Address>;
+  template struct TcpListener<LocalAddress>;
+  template struct UdpSocket<Ipv4Address>;
+  template struct UdpSocket<LocalAddress>;
+
+  template std::expected<TcpListener<Ipv4Address>, IoError> create_tcp_listener<Ipv4Address>(
+    const Ipv4Address &, int
+  );
+  template std::expected<TcpListener<LocalAddress>, IoError> create_tcp_listener<LocalAddress>(
+    const LocalAddress &, int
+  );
+  template std::expected<TcpSocket<Ipv4Address>, IoError> tcp_connect<Ipv4Address>(
+    const Ipv4Address &
+  );
+  template std::expected<TcpSocket<LocalAddress>, IoError> tcp_connect<LocalAddress>(
+    const LocalAddress &
+  );
+  template std::expected<UdpSocket<Ipv4Address>, IoError> create_udp_bind<Ipv4Address>(
+    const Ipv4Address &
+  );
+  template std::expected<UdpSocket<LocalAddress>, IoError> create_udp_bind<LocalAddress>(
+    const LocalAddress &
+  );
+  template std::expected<UdpSocket<Ipv4Address>, IoError> create_udp_socket<Ipv4Address>();
+  template std::expected<UdpSocket<LocalAddress>, IoError> create_udp_socket<LocalAddress>();
+
 }

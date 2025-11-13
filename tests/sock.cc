@@ -1,6 +1,7 @@
 #include <jowi/test_lib.hpp>
 #include <coroutine>
 #include <filesystem>
+#include <format>
 #include <future>
 #include <string>
 #include <string_view>
@@ -24,12 +25,17 @@ JOWI_SETUP(argc, argv) {
   );
 }
 
-auto fsock_path = fs::path{"/tmp/sock"};
+static std::vector<fs::path> local_sockets;
+
+const fs::path &issue_socket() {
+  auto p = fs::path{std::format("/tmp/sock{}", local_sockets.size())};
+  return local_sockets.emplace_back(p);
+}
 
 JOWI_ADD_TEST(test_ipv4_tcp) {
   int port = test_lib::random_integer(20'000, 30'0000);
   auto server_conf = io::Ipv4Address::listen_all(port);
-  auto client_conf = test_lib::assert_expected_value(io::Ipv4Address::create("127.0.0.1", port));
+  auto server_addr = test_lib::assert_expected_value(io::Ipv4Address::create("127.0.0.1", port));
   auto server = test_lib::assert_expected_value(io::create_tcp_listener(server_conf, 50));
   auto msg = test_lib::random_string(100);
   auto fut = std::async(
@@ -45,16 +51,15 @@ JOWI_ADD_TEST(test_ipv4_tcp) {
     std::move(server),
     std::string_view{msg}
   );
-  auto client = test_lib::assert_expected_value(io::tcp_connect(client_conf));
+  auto client = test_lib::assert_expected_value(io::tcp_connect(server_addr));
   auto buf = io::DynBuffer{2048};
   test_lib::assert_expected_value(client.recv(buf, false));
   test_lib::assert_equal(buf.read(), msg);
 }
 
 JOWI_ADD_TEST(test_local_tcp) {
-  int port = test_lib::random_integer(20'000, 30'0000);
-  auto server_conf = io::LocalAddress::with_address(fsock_path.c_str());
-  auto client_conf = server_conf;
+  auto server_conf = io::LocalAddress::with_address(issue_socket().c_str());
+  auto server_addr = server_conf;
   auto server = test_lib::assert_expected_value(io::create_tcp_listener(server_conf, 50));
   auto msg = test_lib::random_string(100);
   auto fut = std::async(
@@ -70,14 +75,28 @@ JOWI_ADD_TEST(test_local_tcp) {
     std::move(server),
     std::string_view{msg}
   );
-  auto client = test_lib::assert_expected_value(io::tcp_connect(client_conf));
+  auto client = test_lib::assert_expected_value(io::tcp_connect(server_addr));
   auto buf = io::DynBuffer{2048};
   test_lib::assert_expected_value(client.recv(buf, false));
   test_lib::assert_equal(buf.read(), msg);
 }
 
+JOWI_ADD_TEST(test_ipv4_udp) {
+  int port = test_lib::random_integer(20'000, 30'0000);
+  auto server_conf = io::Ipv4Address::listen_all(port);
+  auto server_addr = test_lib::assert_expected_value(io::Ipv4Address::create("127.0.0.1", port));
+  auto msg = test_lib::random_string(100);
+  auto buf = io::DynBuffer{2048};
+  auto server = test_lib::assert_expected_value(io::create_udp_bind(server_conf));
+  auto client =
+    test_lib::assert_expected_value(io::create_udp_socket<std::decay_t<decltype(server_conf)>>());
+  test_lib::assert_expected_value(client.send(msg, server_addr, false));
+  test_lib::assert_expected_value(server.recv(buf, false));
+  test_lib::assert_equal(buf.read(), msg);
+}
+
 JOWI_TEARDOWN() {
-  if (fs::is_socket(fsock_path)) {
-    fs::remove(fsock_path);
+  for (auto sock : local_sockets) {
+    fs::remove(sock);
   }
 }
