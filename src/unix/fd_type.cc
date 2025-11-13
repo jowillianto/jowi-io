@@ -38,7 +38,7 @@ namespace jowi::io {
   public:
     BasicOsFile(int fd) : __fd{fd} {}
 
-    int native_handle() {
+    int native_handle() const noexcept {
       return __fd;
     }
   };
