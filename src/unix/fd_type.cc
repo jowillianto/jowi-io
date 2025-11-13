@@ -31,7 +31,7 @@ namespace jowi::io {
     }
   };
 
-  struct BasicOsFile {
+  export struct BasicOsFile {
   private:
     int __fd;
 
