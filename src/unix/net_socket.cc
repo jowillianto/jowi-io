@@ -31,7 +31,6 @@ namespace jowi::io {
       if (!res->has_value() &&
           (res->error().err_code() == EAGAIN || res->error().err_code() == EWOULDBLOCK)) {
         res.reset();
-        return res;
       }
       return res;
     }
@@ -45,11 +44,11 @@ namespace jowi::io {
 
     std::optional<ValueType> poll() const noexcept {
       std::optional<ValueType> res =
-        sys_call(::recv, f.get_or(-1), buf.write_beg(), buf.writable_size(), MSG_DONTWAIT);
+        sys_call(::recv, f.get_or(-1), buf.write_beg(), buf.writable_size(), MSG_DONTWAIT)
+          .transform(BufferWriteMarker{buf});
       if (!res->has_value() &&
           (res->error().err_code() == EAGAIN || res->error().err_code() == EWOULDBLOCK)) {
         res.reset();
-        return res;
       }
       return res;
     }
@@ -128,7 +127,6 @@ namespace jowi::io {
       if (!res->has_value() &&
           (res->error().err_code() == EAGAIN || res->error().err_code() == EWOULDBLOCK)) {
         res.reset();
-        return res;
       }
       return res;
     }
@@ -175,6 +173,58 @@ namespace jowi::io {
     }
   };
 
+  template <NetAddress Addr> struct TcpConnectPoller {
+    const Addr &addr;
+    std::optional<FileDescriptor> fd = std::nullopt;
+    bool conn_before = false;
+
+    TcpConnectPoller(const Addr &addr) : addr{addr} {}
+
+    using ValueType = std::expected<TcpSocket<Addr>, IoError>;
+
+    std::optional<ValueType> poll() noexcept {
+      if (!fd) {
+        auto sock_res = sys_call(socket, Addr::addr_family(), SOCK_STREAM, 0)
+                          .transform(FileDescriptor::manage_default)
+                          .and_then(sys_fcntl_nonblock);
+        if (!sock_res) {
+          return std::unexpected{sock_res.error()};
+        }
+        fd = std::move(sock_res.value());
+      }
+      if (!conn_before) {
+        auto [sys_addr, len] = addr.sys_addr();
+        int conn_res = connect(fd->get_or(-1), sys_addr, len);
+        int err_no = errno;
+        if (conn_res == 0) {
+          return TcpSocket<Addr>{addr, std::move(fd).value()};
+        } else if (err_no == EAGAIN || err_no == EALREADY || err_no == EINPROGRESS) {
+          conn_before = true;
+        } else {
+          return std::unexpected{IoError::str_error(err_no)};
+        }
+      }
+      auto is_writable = sys_poll_out(fd.value());
+      if (!is_writable) {
+        return std::unexpected{is_writable.error()};
+      }
+      if (!is_writable.value()) {
+        return std::nullopt;
+      }
+      socklen_t len = 0;
+      int sock_err = 0;
+      auto res = sys_call_void(
+        getsockopt, fd->get_or(-1), SOL_SOCKET, SO_ERROR, static_cast<void *>(&sock_err), &len
+      );
+      if (!res) {
+        return std::unexpected{res.error()};
+      }
+      if (res && sock_err == 0) {
+        return TcpSocket<Addr>{addr, std::move(fd).value()};
+      }
+      return std::unexpected{IoError::str_error(sock_err)};
+    }
+  };
   export template <NetAddress Addr>
   std::expected<TcpListener<Addr>, IoError> create_tcp_listener(const Addr &addr, int backlog) {
     return TcpListener<std::decay_t<decltype(addr)>>::listen(addr, backlog);
@@ -191,8 +241,64 @@ namespace jowi::io {
       })
       .transform([&](FileDescriptor f) { return TcpSocket{addr, std::move(f)}; });
   }
+  export template <NetAddress Addr>
+  asio::InfiniteAwaiter<TcpConnectPoller<Addr>> atcp_connect(const Addr &addr) {
+    return {addr};
+  }
+  export template <NetAddress Addr, class clock_type = std::chrono::steady_clock>
+  asio::TimedAwaiter<TcpConnectPoller<Addr>, clock_type> atcp_connect(
+    const Addr &addr, std::chrono::milliseconds timeout
+  ) {
+    return {timeout, addr};
+  }
 
   // UDP Section
+  export template <NetAddress Addr> struct UdpSocketSendPoller {
+    using ValueType = std::expected<size_t, IoError>;
+    const FileDescriptor &f;
+    std::string_view payload;
+    const Addr &addr;
+
+    std::optional<ValueType> poll() const noexcept {
+      auto [raw_addr, len] = addr.sys_addr();
+      std::optional<ValueType> res = sys_call(
+        sendto,
+        static_cast<const void *>(payload.data()),
+        payload.length(),
+        MSG_DONTWAIT,
+        raw_addr,
+        len
+      );
+      if (!(res->has_value()) &&
+          (res->error().err_code() == EAGAIN || res->error().err_code() == EWOULDBLOCK)) {
+        res.reset();
+      }
+      return res;
+    }
+  };
+
+  export template <NetAddress Addr, WritableBuffer Buffer> struct UdpSocketRecvPoller {
+    const FileDescriptor &f;
+    Buffer &buf;
+    using ValueType = std::expected<Addr, IoError>;
+    std::optional<ValueType> poll() const noexcept {
+      auto addr = Addr::empty();
+      auto [raw_addr, len] = addr.sys_addr();
+      std::optional<ValueType> res =
+        sys_call(
+          recvfrom, f.get_or(-1), buf.write_beg(), buf.writable_size(), MSG_DONTWAIT, raw_addr, &len
+        )
+          .transform([&](auto write_count) {
+            buf.mark_write(write_count);
+            return addr;
+          });
+      if (!(res->has_value()) &&
+          (res->error().err_code() == EAGAIN || res->error().err_code() == EWOULDBLOCK)) {
+        res.reset();
+      }
+      return res;
+    }
+  };
   export template <NetAddress Addr> struct UdpSocket {
   private:
     FileDescriptor __f;
@@ -229,6 +335,31 @@ namespace jowi::io {
         raw_addr,
         len
       );
+    }
+
+    /*
+     * asynchronous execution
+     */
+    asio::InfiniteAwaiter<UdpSocketSendPoller<Addr>> asend(
+      std::string_view v, const Addr &addr
+    ) const noexcept {
+      return {__f, v, addr};
+    }
+    template <class clock_type = std::chrono::steady_clock>
+    asio::TimedAwaiter<UdpSocketSendPoller<Addr>> asend(
+      std::string_view v, const Addr &addr, std::chrono::milliseconds timeout
+    ) const noexcept {
+      return {timeout, __f, v, addr};
+    }
+    template <WritableBuffer Buffer>
+    asio::InfiniteAwaiter<UdpSocketRecvPoller<Addr, Buffer>> arecv(Buffer &buf) const noexcept {
+      return {__f, buf};
+    }
+    template <WritableBuffer Buffer, class clock_type = std::chrono::steady_clock>
+    asio::TimedAwaiter<UdpSocketRecvPoller<Addr, Buffer>, clock_type> arecv(
+      Buffer &buf, std::chrono::milliseconds timeout
+    ) const noexcept {
+      return {timeout, __f, buf};
     }
 
     static UdpSocket from_fd(FileDescriptor f) {
@@ -287,5 +418,4 @@ namespace jowi::io {
   );
   template std::expected<UdpSocket<Ipv4Address>, IoError> create_udp_socket<Ipv4Address>();
   template std::expected<UdpSocket<LocalAddress>, IoError> create_udp_socket<LocalAddress>();
-
 }

@@ -14,6 +14,7 @@ import jowi.asio;
 namespace test_lib = jowi::test_lib;
 namespace fs = std::filesystem;
 namespace io = jowi::io;
+namespace asio = jowi::asio;
 
 int get_random_port() {
   return test_lib::random_integer(20000, 70000);
@@ -95,6 +96,21 @@ JOWI_ADD_TEST(test_ipv4_udp) {
   test_lib::assert_equal(buf.read(), msg);
 }
 
+template <io::NetAddress Addr>
+asio::BasicTask<void> tcp_server_task(
+  io::TcpListener<Addr> &server, std::string_view msg, const Addr &addr
+) {
+  auto conn = test_lib::assert_expected_value(co_await server.aaccept());
+  test_lib::assert_expected_value(co_await conn.asend(msg));
+}
+
+template <io::NetAddress Addr>
+asio::BasicTask<bool> tcp_client_task(std::string_view msg, const Addr &addr) {
+  auto client = test_lib::assert_expected_value(co_await io::atcp_connect(addr));
+  auto buf = io::DynBuffer{2048};
+  test_lib::assert_expected_value(co_await client.arecv(buf));
+  co_return buf.read() == msg;
+}
 JOWI_TEARDOWN() {
   for (auto sock : local_sockets) {
     fs::remove(sock);
